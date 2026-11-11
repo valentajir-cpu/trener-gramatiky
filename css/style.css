@@ -1,0 +1,132 @@
+/* =====================================================================
+   Trener gramatiky - style.css
+   1. ZAKLAD A BARVY
+   2. ROZVRZENI STRANKY A SPODNI LISTA
+   3. KARTY, TEXTY, TLACITKA
+   4. MAPA GRAMATIKY
+   5. CVICENI
+   6. SHRNUTI A PREHLED
+   ===================================================================== */
+
+/* ---------- 1. ZAKLAD A BARVY ---------- */
+:root {
+  --bg: #F4F5F7; --card: #FFFFFF; --line: #DADFE6; --ink: #14181F; --muted: #556070;
+  --acc: #1D55B0; --acc-soft: #E6EEFB; --acc-mid: #B9CFF2;
+  --warn: #8A3A08; --warn-soft: #FBEDE2; --warn-line: #C98B5B; --warn-mid: #F6CFAE;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-size: 16px; line-height: 1.4;
+  -webkit-text-size-adjust: 100%; }
+button, input { font-family: inherit; font-size: inherit; color: inherit; }
+button { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+button:disabled { opacity: 0.45; cursor: default; }
+h1 { margin: 0; font-size: 30px; line-height: 34px; font-weight: 700; letter-spacing: -0.01em; }
+h1.h2 { font-size: 22px; line-height: 28px; }
+h2 { margin: 6px 0 0; font-size: 18px; font-weight: 600; }
+p { margin: 0; }
+
+/* ---------- 2. ROZVRZENI STRANKY A SPODNI LISTA ---------- */
+#app { max-width: 480px; margin: 0 auto; min-height: 100%; display: flex; flex-direction: column; }
+.page { flex: 1; display: flex; flex-direction: column; gap: 14px; padding: 24px 18px 96px; }
+.page.sess { padding-bottom: 20px; min-height: 100vh; min-height: 100dvh; }
+.nav { position: fixed; left: 0; right: 0; bottom: 0; max-width: 480px; margin: 0 auto; height: 68px;
+  padding-bottom: env(safe-area-inset-bottom); background: var(--card); border-top: 1px solid var(--line);
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.nav-b { border: 0; background: none; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 4px; font-size: 12px; font-weight: 500; color: var(--muted); }
+.nav-b.on { color: var(--acc); font-weight: 600; }
+.head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; }
+.grow { flex: 1; }
+.row-b { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+
+/* ---------- 3. KARTY, TEXTY, TLACITKA ---------- */
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px;
+  display: flex; flex-direction: column; gap: 12px; }
+.card.warn { background: var(--warn-soft); border-color: var(--warn-line); flex-direction: row; }
+.card.note { background: var(--acc-soft); border-color: var(--acc-mid); }
+.card-t { font-size: 18px; font-weight: 600; }
+.card-s { font-size: 15px; font-weight: 600; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+.chip { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; font-size: 14px; font-weight: 600; white-space: nowrap; }
+.pill { font-size: 12px; font-weight: 600; color: var(--acc); background: var(--acc-soft); border-radius: 8px; padding: 5px 10px; white-space: nowrap; }
+.step { display: flex; gap: 12px; align-items: flex-start; }
+.step-n { width: 28px; height: 28px; flex: none; border-radius: 8px; background: var(--acc-soft); color: var(--acc);
+  font-size: 14px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.bar { height: 8px; border-radius: 4px; background: #E3E7ED; overflow: hidden; }
+.bar-in { height: 100%; border-radius: 4px; background: var(--acc); transition: width 0.25s linear; }
+.btn, .btn-sec, .btn-warn, .btn-t, .btn-ghost { border-radius: 12px; font-weight: 600; min-height: 48px; padding: 0 14px; }
+.btn { width: 100%; min-height: 52px; border: 0; background: var(--acc); color: #FFFFFF; font-size: 16px; }
+.btn-sec { width: 100%; border: 1px solid var(--line); background: var(--card); font-size: 15px; display: flex; align-items: center; justify-content: center; text-align: center; }
+.btn-sec.danger { color: var(--warn); border-color: var(--warn-line); }
+.btn-warn { border: 1px solid var(--warn-line); background: var(--card); color: var(--warn); font-size: 14px; min-height: 44px; flex: none; }
+.btn-t { border: 1px solid var(--line); background: var(--card); font-size: 14px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.btn-ghost { border: 1px solid #8FA0B5; background: transparent; color: #FFFFFF; font-size: 13px; min-height: 44px; flex: none; }
+.icon-b { width: 44px; height: 44px; flex: none; border-radius: 10px; border: 1px solid var(--line); background: var(--card);
+  display: flex; align-items: center; justify-content: center; }
+.seg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.seg-b { min-height: 44px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); font-size: 14px; font-weight: 500; }
+.seg-b.on { background: var(--acc); border-color: var(--acc); color: #FFFFFF; font-weight: 600; }
+.filelab { cursor: pointer; }
+.filelab input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.filelab:focus-within { outline: 2px solid var(--acc); outline-offset: 2px; }
+:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
+
+/* ---------- 4. MAPA GRAMATIKY ---------- */
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; }
+.legend span { display: flex; align-items: center; gap: 6px; }
+.legend .cell, .urow .cell { width: 14px; min-height: 14px; height: 14px; border-radius: 4px; flex: none; padding: 0; }
+.cells { display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); gap: 4px; }
+.cell { min-height: 44px; border-radius: 6px; font-size: 11px; font-weight: 600; padding: 0;
+  display: flex; align-items: center; justify-content: center; font-style: normal; }
+span.cell { min-height: 30px; }
+.st-done { background: var(--acc); color: #FFFFFF; border: 1px solid var(--acc); }
+.st-firming { background: var(--acc-mid); color: var(--ink); border: 1px solid #7FA3DE; }
+.st-learning { background: var(--warn-mid); color: var(--ink); border: 1px solid var(--warn-line); }
+.st-new { background: var(--card); color: var(--muted); border: 1px dashed #AEB7C4; }
+.urow { width: 100%; min-height: 52px; border: 0; border-top: 1px solid #E3E7ED; background: none; padding: 8px 0;
+  display: flex; justify-content: space-between; align-items: center; gap: 10px; text-align: left; font-size: 14px; }
+
+/* ---------- 5. CVICENI ---------- */
+.top { display: flex; align-items: center; gap: 12px; }
+.sent { font-size: 23px; line-height: 33px; font-weight: 600; letter-spacing: -0.005em; }
+.w { border-bottom: 1px dotted #AEB7C4; cursor: pointer; }
+.blank { color: var(--acc); letter-spacing: 1px; }
+.bubble { background: var(--ink); color: #FFFFFF; border-radius: 10px; padding: 10px 12px; font-size: 14px;
+  display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.rule { background: var(--acc-soft); border-radius: 10px; padding: 10px 12px; font-size: 14px; }
+.opts { display: grid; gap: 10px; }
+.opt { min-height: 56px; border-radius: 12px; border: 2px solid var(--line); background: var(--card); font-size: 18px; font-weight: 600; }
+.inputs { display: flex; flex-direction: column; gap: 6px; }
+.lab { font-size: 13px; font-weight: 600; }
+.inp { height: 52px; border-radius: 12px; border: 2px solid var(--acc); background: var(--card); padding: 0 14px; font-size: 17px; width: 100%; }
+.tools { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.tools.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.tools.one { grid-template-columns: minmax(0, 1fr); }
+.tbar { display: flex; align-items: center; gap: 10px; }
+.tbar .bar { flex: 1; height: 6px; background: #F3D9C4; }
+.tbar .bar-in { background: #A8470A; }
+.tlabel { font-size: 14px; font-weight: 600; color: var(--warn); min-width: 96px; text-align: right; }
+.micwrap { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 6px 0; }
+.mic { width: 96px; height: 96px; border-radius: 48px; border: 6px solid #C9DAF5; background: var(--acc); color: #FFFFFF;
+  display: flex; align-items: center; justify-content: center; }
+.mic.on { background: #A8470A; border-color: var(--warn-mid); }
+.fb { border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; font-size: 16px; }
+.fb.ok { background: var(--acc-soft); border: 1px solid var(--acc-mid); }
+.fb.bad { background: var(--warn-soft); border: 1px solid var(--warn-line); }
+.fb-t { font-size: 18px; font-weight: 700; }
+.fb.ok .fb-t { color: #173F82; }
+.fb.bad .fb-t { color: var(--warn); }
+
+/* ---------- 6. SHRNUTI A PREHLED ---------- */
+.tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.tile { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 4px; }
+.tile span { font-size: 12px; color: var(--muted); }
+.tile b { font-size: 20px; font-weight: 700; }
+.err { gap: 6px; font-size: 14px; }
+.card .err { display: flex; flex-direction: column; gap: 4px; border-top: 1px solid #E3E7ED; padding-top: 10px; }
+.bad-t { color: var(--warn); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.tag { font-size: 13px; background: var(--acc-soft); color: #173F82; border-radius: 8px; padding: 6px 10px; }
+.wrow { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 14px; border-top: 1px solid #E3E7ED; padding-top: 8px; }

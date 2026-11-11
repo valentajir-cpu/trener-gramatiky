@@ -1,0 +1,10 @@
+{
+  "name": "Trenér gramatiky",
+  "short_name": "Gramatika",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F4F5F7",
+  "theme_color": "#F4F5F7",
+  "lang": "cs"
+}
