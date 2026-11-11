@@ -9,6 +9,7 @@
 // 6. OBRAZOVKA PREHLED (statistiky, slabiny, slovicka, nastaveni)
 // 7. CVICENI (vykresleni ulohy)
 // 8. CVICENI (logika: odpoved, napoveda, obtiznost, casovac, mikrofon)
+// 5B. OBRAZOVKA PISNE (seznam a detail pisne)
 // 9. SHRNUTI
 // 9B. VYKLAD GRAMATIKY
 // 10. UDALOSTI A START
@@ -33,7 +34,7 @@
   function hm(ts) { var d = new Date(ts); return d.getHours() + ':' + (d.getMinutes() < 10 ? '0' : '') + d.getMinutes(); }
   function daysWord(n) { return n === 1 ? 'den' : (n >= 2 && n <= 4 ? 'dny' : 'dní'); }
   var STATUS = { 'new': 'Nové', learning: 'Učím se', firming: 'Upevňuji', done: 'Zvládnuto' };
-  var BLOCK = { review: 'Opakování', grammar: 'Gramatika', speed: 'Pohotovost', placement: 'Vstupní test' };
+  var BLOCK = { review: 'Opakování', grammar: 'Gramatika', speed: 'Pohotovost', placement: 'Vstupní test', song: 'Písnička' };
   var STAGES = [
     { n: 1, title: 'Přítomnost, minulost, plány', first: 1 },
     { n: 2, title: 'Předpřítomný čas, will', first: 4 },
@@ -51,6 +52,8 @@
     mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
     sound: '<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 9a4 4 0 0 1 0 6"/>',
     back: '<path d="M15 5l-7 7 7 7"/>',
+    music: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
+    ext: '<path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
     book: '<path d="M2 5h7a3 3 0 0 1 3 3v12a2 2 0 0 0-2-2H2z"/><path d="M22 5h-7a3 3 0 0 0-3 3v12a2 2 0 0 1 2-2h8z"/>'
   };
   function icon(name, size) {
@@ -58,9 +61,9 @@
     return '<svg aria-hidden="true" width="' + size + '" height="' + size + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + ICON[name] + '</svg>';
   }
   function nav() {
-    var tabs = [['home', 'Dnes', 'home'], ['train', 'Trénink', 'train'], ['map', 'Mapa', 'map'], ['overview', 'Přehled', 'stats']];
+    var tabs = [['home', 'Dnes', 'home'], ['train', 'Trénink', 'train'], ['songs', 'Písně', 'music'], ['map', 'Mapa', 'map'], ['overview', 'Přehled', 'stats']];
     return '<nav class="nav" aria-label="Hlavní">' + tabs.map(function (t) {
-      var on = (V.view === t[0]) || (V.view === 'unit' && t[0] === 'map');
+      var on = (V.view === t[0]) || (V.view === 'unit' && t[0] === 'map') || (V.view === 'song' && t[0] === 'songs');
       return '<button type="button" class="nav-b' + (on ? ' on' : '') + '" data-act="go" data-v="' + t[0] + '"' + (on ? ' aria-current="page"' : '') + '>' + icon(t[2]) + '<span>' + t[1] + '</span></button>';
     }).join('') + '</nav>';
   }
@@ -163,6 +166,84 @@
   }
 
   // ---------- 5. OBRAZOVKA TRENINK ----------
+  // ---------- 5B. OBRAZOVKA PISNE ----------
+  var SONG_TABS = [['about', 'O písni'], ['quiz', 'Porozumění'], ['words', 'Slovíčka'], ['grammar', 'Gramatika'], ['practice', 'Procvičit']];
+  function viewSongs() {
+    var h = '<div class="head"><div><h1>Písně</h1><div class="muted small">Angličtina z písní, které máš rád</div></div></div>';
+    C.SONGS.forEach(function (s) {
+      var p = C.songProgress(s.id);
+      h += '<button type="button" class="card songc" data-act="song" data-s="' + s.id + '"><div class="row-b"><div><div class="card-t">' + esc(s.title) + '</div>' +
+        '<div class="muted small">' + esc(s.artist) + ' · ' + s.year + ' · úroveň ' + esc(s.level) + '</div></div><span class="song-ic">' + icon('music', 26) + '</span></div>' +
+        '<div class="small">Porozumění ' + p.qOk + ' / ' + p.qTotal + ' · Procvičeno ' + p.done + ' / ' + p.total + '</div></button>';
+    });
+    h += '<p class="muted small">Texty písní v aplikaci nejsou kvůli autorským právům. Otevřeš je odkazem na Genius, Spotify nebo YouTube.</p>';
+    return page(h);
+  }
+  // Stabilni poradi moznosti (nezavisle na prekresleni)
+  function quizOrder(q) {
+    var n = q.opts.length, sh = 0, i, out = [];
+    for (i = 0; i < q.id.length + q.q.length; i++) sh += (q.q.charCodeAt(i % q.q.length) || 0);
+    for (i = 0; i < n; i++) out.push((i + sh) % n);
+    return out;
+  }
+  function viewSong() {
+    var s = C.SONG_BY_ID[V.songId], tab = V.songTab || 'about', st = C.songState(s.id), p = C.songProgress(s.id);
+    var h = '<div class="head"><button type="button" class="icon-b" data-act="go" data-v="songs" aria-label="Zpět na písně">' + icon('back') + '</button>' +
+      '<div class="grow"><h1 class="h2">' + esc(s.title) + '</h1><div class="muted small">' + esc(s.artist) + ' · ' + esc(s.album) + ' (' + s.year + ') · úroveň ' + esc(s.level) + '</div></div></div>';
+    h += '<div class="chiprow" role="tablist">' + SONG_TABS.map(function (t) {
+      return '<button type="button" role="tab" class="chip-b' + (t[0] === tab ? ' on' : '') + '" data-act="songtab" data-t="' + t[0] + '"' + (t[0] === tab ? ' aria-selected="true"' : '') + '>' + t[1] + '</button>';
+    }).join('') + '</div>';
+    if (tab === 'about') {
+      h += '<div class="card"><div class="card-s">O čem píseň je</div><p>' + esc(s.summary) + '</p><div class="muted small">Nálada: ' + esc(s.mood) + '</div></div>';
+      h += '<div class="card"><div class="card-s">Poslech a text</div><p class="small muted">Text písně v aplikaci není (autorská práva). Otevři si ho vedle a poslouchej.</p>' +
+        [['genius', 'Text na Genius'], ['spotify', 'Poslech na Spotify'], ['youtube', 'Video s textem na YouTube']].map(function (l) {
+          return '<a class="btn-sec" href="' + esc(s.links[l[0]]) + '" target="_blank" rel="noopener">' + icon('ext', 18) + l[1] + '</a>';
+        }).join('') + '</div>';
+      h += '<div class="card"><div class="card-s">Jak s písní pracovat</div><ol class="ex">' +
+        '<li>Poslechni si píseň jednou bez textu. Co pochytíš?</li><li>Pusť si ji znovu s textem na Genius nebo YouTube.</li>' +
+        '<li>Odpověz na otázky v záložce Porozumění.</li><li>Projdi Slovíčka a Gramatiku, ulož si, co chceš umět.</li>' +
+        '<li>Procvič věty a poslechni si píseň potřetí. Rozumíš víc?</li></ol></div>';
+    } else if (tab === 'quiz') {
+      h += '<p class="small muted">Odpovídej po poslechu. Správně: ' + p.qOk + ' / ' + p.qTotal + '</p>';
+      s.quiz.forEach(function (q, i) {
+        var ch = st.quiz[q.id], answered = ch !== undefined;
+        h += '<div class="card"><div class="card-s">' + (i + 1) + '. ' + esc(q.q) + '</div><div class="opts">';
+        quizOrder(q).forEach(function (k) {
+          if (!answered) h += '<button type="button" class="opt opt-s" data-act="quiz" data-q="' + q.id + '" data-k="' + k + '">' + esc(q.opts[k]) + '</button>';
+          else h += '<div class="opt opt-s ' + (k === q.ans ? 'right' : (k === ch ? 'wrong' : 'dim')) + '">' + esc(q.opts[k]) + '</div>';
+        });
+        h += '</div>';
+        if (answered) h += '<div class="small"><b>' + (ch === q.ans ? 'Správně.' : 'Ne tak docela.') + '</b> ' + esc(q.why) + '</div>';
+        h += '</div>';
+      });
+      if (Object.keys(st.quiz).length) h += '<button type="button" class="btn-sec" data-act="quizreset">Zkusit otázky znovu</button>';
+    } else if (tab === 'words') {
+      h += '<p class="small muted">Zajímavá slova a fráze z písně. Uložená najdeš v Přehledu v Moje slovíčka.</p><div class="card">';
+      s.words.forEach(function (w) {
+        var key = w.en.toLowerCase(), saved = S().words[key] && S().words[key].saved;
+        h += '<div class="pit"><div class="row-b"><div><b>' + esc(w.en) + '</b> · ' + esc(w.cz) + '</div>' +
+          '<div class="wbtns">' + (A.canSpeak() ? '<button type="button" class="icon-b" data-act="sayw" data-t="' + esc(w.en + '. ' + w.ex) + '" aria-label="Přehrát">' + icon('sound', 18) + '</button>' : '') +
+          '<button type="button" class="btn-t" data-act="savew" data-w="' + esc(key) + '"' + (saved ? ' disabled' : '') + '>' + (saved ? 'Uloženo' : 'Uložit') + '</button></div></div>' +
+          '<div class="muted small">' + esc(w.note) + '</div><div class="small"><i>' + esc(w.ex) + '</i></div></div>';
+      });
+      h += '</div>';
+    } else if (tab === 'grammar') {
+      h += '<p class="small muted">Jaká gramatika se v písni objevuje. Příklady jsou vlastní, ne z textu písně.</p>';
+      s.grammar.forEach(function (g) {
+        var has = g.u && C.UNIT_BY_ID[g.u];
+        h += '<div class="card"><div class="row-b"><div class="card-s">' + esc(g.t) + '</div>' + (g.code !== '–' ? '<span class="pill">' + esc(g.code) + '</span>' : '') + '</div>' +
+          '<p class="small"><b>V písni:</b> ' + esc(g.inSong) + '</p><p class="small"><b>Příklad:</b> <i>' + esc(g.ex) + '</i></p>' +
+          (has ? '<button type="button" class="btn-t" data-act="songexp" data-u="' + g.u + '">' + icon('book', 18) + 'Výklad ' + esc(g.code) + '</button>' :
+            '<div class="muted small">' + (g.later.indexOf('etapa') === 0 ? 'Probereš později: ' : 'Poznámka: ') + esc(g.later) + '</div>') + '</div>';
+      });
+    } else {
+      h += '<div class="card"><div class="card-s">Procvičit gramatiku z písně</div><p class="small muted">' + s.items.length + ' vět ve třech stupních na gramatiku, která se v písni objevuje. Věty jsou vlastní, ne z textu písně. Chyby se zařadí do Co mi nejde a do opakování.</p>' +
+        '<div class="bar"><div class="bar-in" style="width:' + Math.round(p.done / Math.max(1, p.total) * 100) + '%"></div></div><div class="small">Procvičeno ' + p.done + ' / ' + p.total + '</div>' +
+        '<button type="button" class="btn" data-act="songpractice">Spustit</button></div>';
+    }
+    return page(h);
+  }
+
   function viewTrain() {
     var weakN = Object.keys(S().weak).length;
     var h = '<div class="head"><div><h1>Trénink</h1><div class="muted small">Cokoli mimo denní lekci</div></div></div>';
@@ -440,7 +521,7 @@
     if (lastSummary.lookups.length) h += '<p class="muted small">Hledaná slovíčka: ' + esc(lastSummary.lookups.join(', ')) + '</p>';
     h += '<div class="grow"></div>';
     if (errs.length) h += '<button type="button" class="btn" data-act="repeaterr">Zopakovat chyby hned</button>';
-    h += '<button type="button" class="btn-sec" data-act="go" data-v="home">Zavřít</button></main>';
+    h += '<button type="button" class="btn-sec" data-act="go" data-v="' + (lastSummary.kind === 'song' ? 'song' : 'home') + '">Zavřít</button></main>';
     return h;
   }
 
@@ -483,7 +564,10 @@
     var h;
     if (V.view === 'session' && ses) h = viewSession();
     else if (V.view === 'summary' && lastSummary) h = viewSummary();
+    else if (V.view === 'explain' && V.ex && V.ex.unitId) h = explainPage(V.ex.unitId, null, null, 'explainback', 'Zpět na písničku');
     else if (V.view === 'explain' && lastSummary && V.ex) { var rr = lastSummary.results[V.ex.r]; h = explainPage(C.UNIT_OF_ITEM[rr.itemId], C.ITEM_BY_ID[rr.itemId], rr, 'explainback', 'Zpět na shrnutí'); }
+    else if (V.view === 'songs') h = viewSongs();
+    else if (V.view === 'song' && V.songId) h = viewSong();
     else if (V.view === 'map') h = viewMap();
     else if (V.view === 'unit' && V.unitId) h = viewUnit();
     else if (V.view === 'train') h = viewTrain();
@@ -491,6 +575,8 @@
     else { V.view = 'home'; h = viewHome(); }
     app.innerHTML = h;
     scheduleDue();
+    var chipOn = app.querySelector('.chip-b.on');
+    if (chipOn) { try { chipOn.scrollIntoView({ block: 'nearest', inline: 'center' }); } catch (e) { /* nic */ } }
     if (V.view === 'session' && ses && ses.phase === 'ask') {
       startTimer();
       var first = app.querySelector('input[data-gap]');
@@ -543,8 +629,16 @@
         ses.explain = false;
         if (ses.phase === 'ask') { ses.startTs = Date.now(); ses.slow = false; }
         render(); window.scrollTo(0, 0); break;
-      case 'explainsum': V.ex = { r: +el.getAttribute('data-r') }; V.view = 'explain'; render(); window.scrollTo(0, 0); break;
-      case 'explainback': V.view = 'summary'; render(); break;
+      case 'explainsum': V.ex = { r: +el.getAttribute('data-r'), back: 'summary' }; V.view = 'explain'; render(); window.scrollTo(0, 0); break;
+      case 'explainback': V.view = (V.ex && V.ex.back) || 'summary'; render(); break;
+      case 'song': V.songId = el.getAttribute('data-s'); V.songTab = 'about'; V.view = 'song'; render(); window.scrollTo(0, 0); break;
+      case 'songtab': V.songTab = el.getAttribute('data-t'); render(); break;
+      case 'quiz': C.answerQuiz(V.songId, el.getAttribute('data-q'), +el.getAttribute('data-k')); render(); break;
+      case 'quizreset': C.resetQuiz(V.songId); render(); window.scrollTo(0, 0); break;
+      case 'sayw': A.speak(el.getAttribute('data-t')); break;
+      case 'savew': C.lookup(el.getAttribute('data-w'), true); render(); break;
+      case 'songexp': V.ex = { unitId: el.getAttribute('data-u'), back: 'song' }; V.view = 'explain'; render(); window.scrollTo(0, 0); break;
+      case 'songpractice': startSession(C.buildSong(V.songId)); break;
       case 'say': A.speak(filled(cur().item)); break;
       case 'wasright':
         C.addVariant(ses.last.itemId, ses.last.your); ses.last.ok = true;

@@ -32,7 +32,7 @@ p { margin: 0; }
 .page.sess { padding-bottom: 20px; min-height: 100vh; min-height: 100dvh; }
 .nav { position: fixed; left: 0; right: 0; bottom: 0; max-width: 480px; margin: 0 auto; height: calc(68px + env(safe-area-inset-bottom));
   padding-bottom: env(safe-area-inset-bottom); background: var(--card); border-top: 1px solid var(--line);
-  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .nav-b { border: 0; background: none; display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 4px; font-size: 12px; font-weight: 500; color: var(--muted); }
 .nav-b.on { color: var(--acc); font-weight: 600; }
@@ -133,6 +133,20 @@ span.cell { min-height: 30px; }
 .xf:first-child, .pit:first-child { border-top: 0; padding-top: 0; }
 .xf-k { font-size: 13px; font-weight: 600; color: var(--muted); }
 .link-b { display: block; border: 0; background: none; color: var(--acc); font-weight: 600; font-size: 14px; padding: 8px 0 0; min-height: 36px; text-align: left; }
+
+/* ---------- 5C. PISNE ---------- */
+.songc { width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+.song-ic { color: var(--acc); flex: none; }
+.chiprow { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+.chiprow::-webkit-scrollbar { display: none; }
+.chip-b { flex: none; min-height: 40px; padding: 0 14px; border-radius: 20px; border: 1px solid var(--line); background: var(--card); font-size: 14px; font-weight: 500; white-space: nowrap; }
+.chip-b.on { background: var(--acc); border-color: var(--acc); color: #FFFFFF; font-weight: 600; }
+.opt-s { min-height: 48px; font-size: 15px; font-weight: 500; text-align: left; padding: 10px 14px; display: flex; align-items: center; }
+.opt-s.right { border-color: var(--acc); background: var(--acc-soft); font-weight: 600; }
+.opt-s.wrong { border-color: var(--warn-line); background: var(--warn-soft); color: var(--warn); }
+.opt-s.dim { color: var(--muted); }
+.wbtns { display: flex; gap: 6px; flex: none; }
+a.btn-sec { color: var(--ink); text-decoration: none; }
 
 /* ---------- 6. SHRNUTI A PREHLED ---------- */
 .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }

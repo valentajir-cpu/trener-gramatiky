@@ -5,6 +5,7 @@
 // 2. POMOCNE FUNKCE (datum, nahoda)
 // 3. ULOZENA HRA (nacteni, migrace, zaloha)
 // 4. DATA (jevy a ulohy)
+// 4B. PISNICKY
 // 5. NORMALIZACE A KONTROLA ODPOVEDI
 // 6. ZAZNAM ODPOVEDI (Leitner, slabiny, uroven, stav jevu)
 // 7. VYBER ULOH (lekce, trenink, vstupni test)
@@ -16,7 +17,7 @@
 
   // ---------- 1. KONFIGURACE ----------
   var CONFIG = {
-    appVersion: '1.4',
+    appVersion: '1.5',
     saveKey: 'trenerGramatiky.save',
     schemaVersion: 1,
     leitnerDays: [0, 1, 2, 4, 8, 16, 32],   // intervaly krabicek 0-6
@@ -54,6 +55,7 @@
       placementDone: false,
       units: {}, items: {}, weak: {}, words: {}, variants: {},
       later: { items: [], due: 0, notified: false },
+      songs: {},
       days: {}, streak: { n: 0, last: '' }, lessonDone: ''
     };
   }
@@ -101,6 +103,32 @@
     if (!S.items[id]) S.items[id] = { box: 0, due: '', seen: 0, wrong: 0 };
     return S.items[id];
   }
+  // ---------- 4B. PISNICKY ----------
+  // Ulohy z pisnicek se registruji jako bezne ulohy (Leitner, Co mi nejde, vyklad),
+  // ale neovlivnuji stav a obtiznost jevu v Mape.
+  var SONGS = window.TG_SONGS || [], SONG_BY_ID = {}, SONG_OF_ITEM = {};
+  SONGS.forEach(function (s) {
+    SONG_BY_ID[s.id] = s;
+    s.items.forEach(function (it) { ITEM_BY_ID[it.id] = it; UNIT_OF_ITEM[it.id] = it.u; SONG_OF_ITEM[it.id] = s.id; });
+  });
+  function songState(id) {
+    if (!S.songs) S.songs = {};
+    if (!S.songs[id]) S.songs[id] = { quiz: {} };
+    return S.songs[id];
+  }
+  function songProgress(id) {
+    var s = SONG_BY_ID[id], done = 0, qOk = 0, q = songState(id).quiz;
+    s.items.forEach(function (it) { var st = S.items[it.id]; if (st && st.box > 0) done++; });
+    s.quiz.forEach(function (x) { if (q[x.id] === x.ans) qOk++; });
+    return { done: done, total: s.items.length, qOk: qOk, qTotal: s.quiz.length };
+  }
+  function answerQuiz(songId, qid, idx) { songState(songId).quiz[qid] = idx; save(); }
+  function resetQuiz(songId) { songState(songId).quiz = {}; save(); }
+  function buildSong(id) {
+    var s = SONG_BY_ID[id], items = s.items.slice().sort(function (a, b) { return a.lvl - b.lvl; });
+    return { kind: 'song', unitId: null, queue: items.map(function (it) { return { item: it, unitId: it.u, block: 'song', timed: false }; }) };
+  }
+
   function effLvl(unitId) { return clamp(unitState(unitId).lvl + (S.settings.offset || 0), 1, 3); }
 
   // ---------- 5. NORMALIZACE A KONTROLA ODPOVEDI ----------
@@ -155,20 +183,22 @@
     // 6.2 Slabiny: vznik po prvni chybe, zmizi po dvou spravnych
     if (!ok) S.weak[itemId] = { streak: 0 };
     else if (S.weak[itemId]) { S.weak[itemId].streak++; if (S.weak[itemId].streak >= 2) delete S.weak[itemId]; }
-    // 6.3 Historie jevu a automaticka obtiznost
-    us.hist.push(ok ? 1 : 0); us.all.push(ok ? 1 : 0);
-    if (us.all.length > 12) us.all.shift();
-    if (us.days.indexOf(t) < 0) us.days.push(t);
-    if (us.hist.length >= CONFIG.lvlWindow) {
-      var a = acc(us.hist.slice(-CONFIG.lvlWindow));
-      if (a >= CONFIG.lvlUp && us.lvl < 3) { us.lvl++; us.hist = []; out.lvlChange = 1; }
-      else if (a < CONFIG.lvlDown && us.lvl > 1) { us.lvl--; us.hist = []; out.lvlChange = -1; }
+    if (!SONG_OF_ITEM[itemId]) {
+      // 6.3 Historie jevu a automaticka obtiznost
+      us.hist.push(ok ? 1 : 0); us.all.push(ok ? 1 : 0);
+      if (us.all.length > 12) us.all.shift();
+      if (us.days.indexOf(t) < 0) us.days.push(t);
+      if (us.hist.length >= CONFIG.lvlWindow) {
+        var a = acc(us.hist.slice(-CONFIG.lvlWindow));
+        if (a >= CONFIG.lvlUp && us.lvl < 3) { us.lvl++; us.hist = []; out.lvlChange = 1; }
+        else if (a < CONFIG.lvlDown && us.lvl > 1) { us.lvl--; us.hist = []; out.lvlChange = -1; }
+      }
+      // 6.4 Stav jevu
+      var recent = us.all.slice(-CONFIG.doneMin), ra = acc(recent);
+      if (us.lvl >= 2 && recent.length >= CONFIG.doneMin && ra >= CONFIG.doneAcc) us.status = 'done';
+      else if (recent.length >= 4 && ra >= CONFIG.firmAcc) us.status = 'firming';
+      else us.status = 'learning';
     }
-    // 6.4 Stav jevu
-    var recent = us.all.slice(-CONFIG.doneMin), ra = acc(recent);
-    if (us.lvl >= 2 && recent.length >= CONFIG.doneMin && ra >= CONFIG.doneAcc) us.status = 'done';
-    else if (recent.length >= 4 && ra >= CONFIG.firmAcc) us.status = 'firming';
-    else us.status = 'learning';
     // 6.5 Denni statistika
     var d = S.days[t] || (S.days[t] = { n: 0, ok: 0, ms: 0 });
     d.n++; if (ok) d.ok++; d.ms += (ms || 0);
@@ -319,6 +349,8 @@
     currentUnit: currentUnit, pickItems: pickItems, buildLesson: buildLesson, buildTraining: buildTraining, buildWeak: buildWeak,
     buildSpeed: buildSpeed, buildPlacement: buildPlacement, applyPlacement: applyPlacement,
     finishLesson: finishLesson, streakNow: streakNow, stageProgress: stageProgress, totals: totals,
-    laterState: laterState, laterReady: laterReady, deferItems: deferItems, laterDone: laterDone, buildLater: buildLater
+    laterState: laterState, laterReady: laterReady, deferItems: deferItems, laterDone: laterDone, buildLater: buildLater,
+    SONGS: SONGS, SONG_BY_ID: SONG_BY_ID, SONG_OF_ITEM: SONG_OF_ITEM, songState: songState, songProgress: songProgress,
+    answerQuiz: answerQuiz, resetQuiz: resetQuiz, buildSong: buildSong
   };
 })();

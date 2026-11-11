@@ -8,12 +8,12 @@
 // =====================================================================
 
 // ---------- 1. KONFIGURACE ----------
-var VERSION = 'tg-1.4.0';
+var VERSION = 'tg-1.5.0';
 var NET_TIMEOUT_MS = 4000;
 var FILES = [
   './', 'index.html', 'manifest.json', 'css/style.css',
   'js/core.js', 'js/audio.js', 'js/ui.js',
-  'data/grammar.js', 'data/dict.js',
+  'data/grammar.js', 'data/dict.js', 'data/songs.js',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png'
 ];
 
