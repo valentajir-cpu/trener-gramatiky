@@ -8,7 +8,7 @@
 // =====================================================================
 
 // ---------- 1. KONFIGURACE ----------
-var VERSION = 'tg-1.1.0';
+var VERSION = 'tg-1.3.0';
 var NET_TIMEOUT_MS = 4000;
 var FILES = [
   './', 'index.html', 'manifest.json', 'css/style.css',

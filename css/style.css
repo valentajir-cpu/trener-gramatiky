@@ -45,6 +45,10 @@ p { margin: 0; }
   display: flex; flex-direction: column; gap: 12px; }
 .card.warn { background: var(--warn-soft); border-color: var(--warn-line); flex-direction: row; }
 .card.note { background: var(--acc-soft); border-color: var(--acc-mid); }
+.card.row { flex-direction: row; align-items: center; justify-content: space-between; }
+.card.row > button { flex: none; }
+.card.ready { background: var(--acc-soft); border: 2px solid var(--acc); }
+.btn-sm { min-height: 44px; border: 0; border-radius: 12px; padding: 0 14px; background: var(--acc); color: #FFFFFF; font-size: 14px; font-weight: 600; }
 .card-t { font-size: 18px; font-weight: 600; }
 .card-s { font-size: 15px; font-weight: 600; }
 .muted { color: var(--muted); }
@@ -105,6 +109,8 @@ span.cell { min-height: 30px; }
 .tools { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .tools.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .tools.one { grid-template-columns: minmax(0, 1fr); }
+.tools.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.tools.four .btn-t { padding: 0 4px; white-space: nowrap; }
 .tbar { display: flex; align-items: center; gap: 10px; }
 .tbar .bar { flex: 1; height: 6px; background: #F3D9C4; }
 .tbar .bar-in { background: #A8470A; }

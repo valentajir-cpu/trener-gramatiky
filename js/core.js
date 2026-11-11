@@ -9,13 +9,14 @@
 // 6. ZAZNAM ODPOVEDI (Leitner, slabiny, uroven, stav jevu)
 // 7. VYBER ULOH (lekce, trenink, vstupni test)
 // 8. STATISTIKY A SERIE
+// 9. ODLOZENE MLUVENI
 // =====================================================================
 (function () {
   'use strict';
 
   // ---------- 1. KONFIGURACE ----------
   var CONFIG = {
-    appVersion: '1.1',
+    appVersion: '1.3',
     saveKey: 'trenerGramatiky.save',
     schemaVersion: 1,
     leitnerDays: [0, 1, 2, 4, 8, 16, 32],   // intervaly krabicek 0-6
@@ -52,6 +53,7 @@
       settings: { offset: 0, voice: true },
       placementDone: false,
       units: {}, items: {}, weak: {}, words: {}, variants: {},
+      later: { items: [], due: 0, notified: false },
       days: {}, streak: { n: 0, last: '' }, lessonDone: ''
     };
   }
@@ -289,6 +291,26 @@
     return { n: n, ok: ok, acc: n ? Math.round(ok / n * 100) : 0, avgSec: n ? Math.round(ms / n / 100) / 10 : 0, days: Object.keys(S.days).length };
   }
 
+  // ---------- 9. ODLOZENE MLUVENI ----------
+  // Vety k vysloveni odlozene na pozdeji (napr. v tramvaji). due = cas v ms, 0 = az budu moct.
+  function laterState() { var L = S.later; return (L && L.items && L.items.length) ? L : null; }
+  function laterReady() { var L = laterState(); return !!L && (!L.due || L.due <= Date.now()); }
+  function deferItems(ids, minutes) {
+    var L = S.later || (S.later = { items: [], due: 0, notified: false });
+    ids.forEach(function (id) { if (L.items.indexOf(id) < 0) L.items.push(id); });
+    L.due = minutes > 0 ? Date.now() + minutes * 60000 : 0;
+    L.notified = false;
+    save(); return L;
+  }
+  function laterDone(id) {
+    var L = S.later; if (!L || !L.items) return;
+    var i = L.items.indexOf(id); if (i >= 0) { L.items.splice(i, 1); save(); }
+  }
+  function buildLater() {
+    var L = laterState(), ids = L ? L.items.filter(function (id) { return ITEM_BY_ID[id]; }) : [];
+    return { kind: 'later', unitId: null, queue: ids.map(function (id) { return entry(ITEM_BY_ID[id], 'speed', true); }) };
+  }
+
   window.Core = {
     CONFIG: CONFIG, UNITS: UNITS, UNIT_BY_ID: UNIT_BY_ID, ITEM_BY_ID: ITEM_BY_ID, UNIT_OF_ITEM: UNIT_OF_ITEM,
     state: function () { return S; }, load: load, save: save, exportSave: exportSave, importSave: importSave, resetAll: resetAll,
@@ -296,6 +318,7 @@
     unitState: unitState, itemState: itemState, effLvl: effLvl, unitAcc: unitAcc, record: record, setManualLvl: setManualLvl, lookup: lookup,
     currentUnit: currentUnit, pickItems: pickItems, buildLesson: buildLesson, buildTraining: buildTraining, buildWeak: buildWeak,
     buildSpeed: buildSpeed, buildPlacement: buildPlacement, applyPlacement: applyPlacement,
-    finishLesson: finishLesson, streakNow: streakNow, stageProgress: stageProgress, totals: totals
+    finishLesson: finishLesson, streakNow: streakNow, stageProgress: stageProgress, totals: totals,
+    laterState: laterState, laterReady: laterReady, deferItems: deferItems, laterDone: laterDone, buildLater: buildLater
   };
 })();
