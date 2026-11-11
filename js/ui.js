@@ -12,7 +12,7 @@
 // 5B. OBRAZOVKA PISNE (seznam a detail pisne)
 // 9. SHRNUTI
 // 9B. VYKLAD GRAMATIKY
-// 10. UDALOSTI A START
+// 10. UDALOSTI A START (vcetne vzhledu: tmavy rezim, velikost pisma)
 // =====================================================================
 (function () {
   'use strict';
@@ -280,9 +280,17 @@
     });
     h += '</div>';
     var off = st.settings.offset || 0;
-    h += '<div class="card"><div class="card-s">Nastavení</div><div class="small">Celková obtížnost</div><div class="seg">' + [[-1, 'Lehčí'], [0, 'Normální'], [1, 'Těžší']].map(function (o) {
-      return '<button type="button" class="seg-b' + (o[0] === off ? ' on' : '') + '" data-act="offset" data-o="' + o[0] + '">' + o[1] + '</button>';
-    }).join('') + '</div>' +
+    var thm = st.settings.theme || 'light', fnt = st.settings.font || 1;
+    h += '<div class="card"><div class="card-s">Nastavení</div>' +
+      '<div class="set-l">Vzhled</div><div class="seg">' + [['light', 'Světlý'], ['dark', 'Tmavý'], ['auto', 'Podle telefonu']].map(function (o) {
+        return '<button type="button" class="seg-b' + (o[0] === thm ? ' on' : '') + '" data-act="theme" data-o="' + o[0] + '"' + (o[0] === thm ? ' aria-pressed="true"' : '') + '>' + o[1] + '</button>';
+      }).join('') + '</div>' +
+      '<div class="set-l">Velikost písma</div><div class="seg">' + [[1, 'Normální'], [1.1, 'Větší'], [1.2, 'Největší']].map(function (o) {
+        return '<button type="button" class="seg-b' + (o[0] === fnt ? ' on' : '') + '" data-act="font" data-o="' + o[0] + '"' + (o[0] === fnt ? ' aria-pressed="true"' : '') + '>' + o[1] + '</button>';
+      }).join('') + '</div>' +
+      '<div class="set-l">Celková obtížnost</div><div class="seg">' + [[-1, 'Lehčí'], [0, 'Normální'], [1, 'Těžší']].map(function (o) {
+        return '<button type="button" class="seg-b' + (o[0] === off ? ' on' : '') + '" data-act="offset" data-o="' + o[0] + '"' + (o[0] === off ? ' aria-pressed="true"' : '') + '>' + o[1] + '</button>';
+      }).join('') + '</div>' +
       '<button type="button" class="btn-sec" data-act="voice">Čtení správné odpovědi nahlas: ' + (st.settings.voice ? 'zapnuto' : 'vypnuto') + '</button>' +
       '<button type="button" class="btn-sec" data-act="placement">Spustit vstupní test znovu</button>' +
       '<button type="button" class="btn-sec" data-act="export">Záloha: stáhnout soubor</button>' +
@@ -367,7 +375,7 @@
     return it.en.replace(/___/g, function () { return parts[i++] || ''; }).replace(/\s*\([a-z ,]+\)/g, '');
   }
   function feedback(e, it) {
-    var r = ses.last, h = '<div class="fb ' + (r.ok ? 'ok' : 'bad') + '"><div class="fb-t">' + (r.ok ? 'Správně' : (r.helped ? 'S nápovědou se počítá jako chyba' : 'Chyba')) + (r.slow ? ' · přes časový limit' : '') + '</div>';
+    var r = ses.last, h = '<div class="fb ' + (r.ok ? 'ok' : 'bad') + '"><div class="fb-t">' + (r.ok ? 'Správně' : (r.dunno ? 'Nevím, počítá se jako chyba' : (r.helped ? 'S nápovědou se počítá jako chyba' : 'Chyba'))) + (r.slow ? ' · přes časový limit' : '') + '</div>';
     if (!r.ok && r.your) h += '<div><b>Tvoje:</b> ' + esc(r.your) + '</div>';
     h += '<div><b>Správně:</b> ' + enText(filled(it)) + '</div>';
     if (it.type !== 'translate') h += '<div class="muted small">' + esc(it.cz) + '</div>';
@@ -418,7 +426,7 @@
     stopTimer(); A.stop(); ses.listening = false;
     var your = forcedWrong ? '' : (Array.isArray(answer) ? answer.join(' ... ') : answer);
     var out = e.block === 'placement' ? { lvlChange: 0 } : C.record(it.id, ok, ms);
-    ses.last = { itemId: it.id, ok: ok, your: your, slow: ses.slow, helped: helped, ms: ms, lvlChange: e.block === 'grammar' ? out.lvlChange : 0 };
+    ses.last = { itemId: it.id, ok: ok, your: your, slow: ses.slow, helped: helped, dunno: !!forcedWrong, ms: ms, lvlChange: e.block === 'grammar' ? out.lvlChange : 0 };
     ses.results.push(ses.last);
     if (it.type === 'translate' && e.block !== 'placement') C.laterDone(it.id);
     ses.phase = 'feedback'; ses.bubble = null;
@@ -509,7 +517,7 @@
     if (!errs.length) h += '<p class="muted">Bez chyby.</p>';
     errs.forEach(function (r) {
       var it = C.ITEM_BY_ID[r.itemId], u = C.UNIT_BY_ID[C.UNIT_OF_ITEM[r.itemId]];
-      h += '<div class="card err"><div class="muted small">' + u.code + ' · ' + esc(u.title) + (r.helped ? ' · s nápovědou' : '') + '</div>' +
+      h += '<div class="card err"><div class="muted small">' + u.code + ' · ' + esc(u.title) + (r.dunno ? ' · Nevím' : (r.helped ? ' · s nápovědou' : '')) + '</div>' +
         (it.type === 'translate' ? '<div class="small">' + esc(it.cz) + '</div>' : '') +
         (r.your ? '<div class="bad-t"><b>Tvoje:</b> ' + esc(r.your) + '</div>' : '') +
         '<div><b>Správně:</b> ' + esc(filled(it)) + '</div><div class="muted small">' + esc(u.rule) + '</div>' +
@@ -598,6 +606,8 @@
       case 'trainlvl': V.trainLvl = +el.getAttribute('data-l'); render(); break;
       case 'trainunit': startSession(C.buildTraining(V.unitId, V.trainLvl || C.effLvl(V.unitId))); break;
       case 'offset': S().settings.offset = +el.getAttribute('data-o'); C.save(); render(); break;
+      case 'theme': S().settings.theme = el.getAttribute('data-o'); C.save(); applyLook(); render(); break;
+      case 'font': S().settings.font = +el.getAttribute('data-o'); C.save(); applyLook(); render(); break;
       case 'voice': S().settings.voice = !S().settings.voice; C.save(); render(); break;
       case 'export': doExport(); break;
       case 'reset':
@@ -696,9 +706,21 @@
       if (a && a.matches && a.matches('input[data-gap]') && b) { try { b.scrollIntoView({ block: 'end', behavior: 'smooth' }); } catch (e) { b.scrollIntoView(false); } }
     }, 300);
   }
+  // 10.2 Vzhled: tmavy rezim a velikost pisma
+  var darkMq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+  function applyLook() {
+    var st = S().settings, t = st.theme || 'light';
+    var dark = t === 'dark' || (t === 'auto' && darkMq && darkMq.matches);
+    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+    document.documentElement.style.fontSize = (16 * (st.font || 1)) + 'px';
+    var m = document.querySelector('meta[name="theme-color"]');
+    if (m) m.setAttribute('content', dark ? '#0F1318' : '#F4F5F7');
+  }
   function init() {
     app = document.getElementById('app');
     C.load();
+    applyLook();
+    if (darkMq) { var onMq = function () { if ((S().settings.theme || 'light') === 'auto') applyLook(); }; if (darkMq.addEventListener) darkMq.addEventListener('change', onMq); else if (darkMq.addListener) darkMq.addListener(onMq); }
     app.addEventListener('click', onClick);
     app.addEventListener('keydown', onKey);
     app.addEventListener('change', onChange);

@@ -17,7 +17,7 @@
 
   // ---------- 1. KONFIGURACE ----------
   var CONFIG = {
-    appVersion: '1.5',
+    appVersion: '1.6',
     saveKey: 'trenerGramatiky.save',
     schemaVersion: 1,
     leitnerDays: [0, 1, 2, 4, 8, 16, 32],   // intervaly krabicek 0-6
@@ -51,7 +51,7 @@
   function freshState() {
     return {
       schemaVersion: CONFIG.schemaVersion, created: today(),
-      settings: { offset: 0, voice: true },
+      settings: { offset: 0, voice: true, theme: 'light', font: 1 },
       placementDone: false,
       units: {}, items: {}, weak: {}, words: {}, variants: {},
       later: { items: [], due: 0, notified: false },
