@@ -15,6 +15,7 @@
 
   // ---------- 1. KONFIGURACE ----------
   var CONFIG = {
+    appVersion: '1.1',
     saveKey: 'trenerGramatiky.save',
     schemaVersion: 1,
     leitnerDays: [0, 1, 2, 4, 8, 16, 32],   // intervaly krabicek 0-6

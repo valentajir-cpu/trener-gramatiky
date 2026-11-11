@@ -195,7 +195,8 @@
       '<button type="button" class="btn-sec" data-act="export">Záloha: stáhnout soubor</button>' +
       '<label class="btn-sec filelab">Záloha: nahrát soubor<input type="file" id="importFile" accept="application/json,.json"></label>' +
       '<button type="button" class="btn-sec danger" data-act="reset">' + (V.resetArmed ? 'Opravdu smazat veškerý pokrok? Ťukni znovu' : 'Smazat pokrok') + '</button>' +
-      (V.msg ? '<p class="small">' + esc(V.msg) + '</p>' : '') + '</div>';
+      (V.msg ? '<p class="small">' + esc(V.msg) + '</p>' : '') + '</div>' +
+      '<p class="muted small center">Trenér gramatiky · verze ' + C.CONFIG.appVersion + '</p>';
     return page(h);
   }
 
