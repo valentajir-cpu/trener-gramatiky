@@ -1,0 +1,815 @@
+// =====================================================================
+// Trener gramatiky - ui.js
+// Obrazovky a prubeh cviceni
+// 1. STAV A POMOCNE FUNKCE
+// 2. SPOLECNE PRVKY (ikony, lista, anglicka veta se slovnickem)
+// 3. OBRAZOVKA DNES
+// 4. OBRAZOVKA MAPA A DETAIL JEVU
+// 5. OBRAZOVKA TRENINK
+// 6. OBRAZOVKA PREHLED (statistiky, slabiny, slovicka, nastaveni)
+// 7. CVICENI (vykresleni ulohy)
+// 8. CVICENI (logika: odpoved, napoveda, obtiznost, casovac, mikrofon)
+// 5B. OBRAZOVKA PISNE (seznam a detail pisne)
+// 9. SHRNUTI
+// 9B. VYKLAD GRAMATIKY
+// 10. UDALOSTI A START (vcetne vzhledu: tmavy rezim, velikost pisma)
+// =====================================================================
+(function () {
+  'use strict';
+  var C = window.Core, A = window.Sound;
+
+  // ---------- 1. STAV A POMOCNE FUNKCE ----------
+  var app = null;
+  var V = { view: 'home', unitId: null, trainLvl: 0, msg: '', resetArmed: false };
+  var ses = null;          // bezici cviceni
+  var lastSummary = null;  // posledni shrnuti
+  var timer = null;
+
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function S() { return C.state(); }
+  var DAYS = ['Neděle', 'Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota'];
+  var MONTHS = ['ledna', 'února', 'března', 'dubna', 'května', 'června', 'července', 'srpna', 'září', 'října', 'listopadu', 'prosince'];
+  function dateLabel() { var d = new Date(); return DAYS[d.getDay()] + ' ' + d.getDate() + '. ' + MONTHS[d.getMonth()]; }
+  function vetWord(n) { return n === 1 ? 'věta' : (n >= 2 && n <= 4 ? 'věty' : 'vět'); }
+  function hm(ts) { var d = new Date(ts); return d.getHours() + ':' + (d.getMinutes() < 10 ? '0' : '') + d.getMinutes(); }
+  function daysWord(n) { return n === 1 ? 'den' : (n >= 2 && n <= 4 ? 'dny' : 'dní'); }
+  var STATUS = { 'new': 'Nové', learning: 'Učím se', firming: 'Upevňuji', done: 'Zvládnuto' };
+  var BLOCK = { review: 'Opakování', grammar: 'Gramatika', speed: 'Pohotovost', placement: 'Vstupní test', song: 'Písnička', drill: 'Dril vzorů' };
+  var STAGES = [
+    { n: 1, title: 'Přítomnost, minulost, plány', first: 1 },
+    { n: 2, title: 'Předpřítomný čas, will', first: 4 },
+    { n: 3, title: 'Vazby, modální, podmínky', first: 7 },
+    { n: 4, title: 'Trpný rod, vyprávění', first: 10 }
+  ];
+
+  // ---------- 2. SPOLECNE PRVKY ----------
+  var ICON = {
+    home: '<path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
+    train: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    map: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
+    stats: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+    close: '<path d="M6 6l12 12M18 6L6 18"/>',
+    mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
+    sound: '<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 9a4 4 0 0 1 0 6"/>',
+    back: '<path d="M15 5l-7 7 7 7"/>',
+    music: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
+    ext: '<path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
+    book: '<path d="M2 5h7a3 3 0 0 1 3 3v12a2 2 0 0 0-2-2H2z"/><path d="M22 5h-7a3 3 0 0 0-3 3v12a2 2 0 0 1 2-2h8z"/>'
+  };
+  function icon(name, size) {
+    size = size || 22;
+    return '<svg aria-hidden="true" width="' + size + '" height="' + size + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + ICON[name] + '</svg>';
+  }
+  function nav() {
+    var tabs = [['home', 'Dnes', 'home'], ['train', 'Trénink', 'train'], ['songs', 'Písně', 'music'], ['map', 'Mapa', 'map'], ['overview', 'Přehled', 'stats']];
+    return '<nav class="nav" aria-label="Hlavní">' + tabs.map(function (t) {
+      var on = (V.view === t[0]) || (V.view === 'unit' && t[0] === 'map') || (V.view === 'song' && t[0] === 'songs');
+      return '<button type="button" class="nav-b' + (on ? ' on' : '') + '" data-act="go" data-v="' + t[0] + '"' + (on ? ' aria-current="page"' : '') + '>' + icon(t[2]) + '<span>' + t[1] + '</span></button>';
+    }).join('') + '</nav>';
+  }
+  function page(inner) { return '<main class="page">' + inner + '</main>' + nav(); }
+  // anglicky text, kazde slovo jde tuknout
+  function enText(text) {
+    return String(text).split(/([A-Za-z][A-Za-z']*)/).map(function (p, i) {
+      if (i % 2 === 1) return '<span class="w" data-act="word" data-w="' + esc(p.toLowerCase()) + '">' + esc(p) + '</span>';
+      return esc(p).replace(/___/g, '<span class="blank">___</span>');
+    }).join('');
+  }
+  function bubble() {
+    if (!ses || !ses.bubble) return '';
+    var w = ses.bubble, cz = (window.TG_DICT || {})[w];
+    var saved = S().words[w] && S().words[w].saved;
+    return '<div class="bubble"><div><b>' + esc(w) + '</b> · ' + esc(cz || 've slovníčku zatím není') + '</div>' +
+      '<button type="button" class="btn-ghost" data-act="saveword" data-w="' + esc(w) + '"' + (saved ? ' disabled' : '') + '>' + (saved ? 'Uloženo' : 'Uložit slovíčko') + '</button></div>';
+  }
+
+  // ---------- 3. OBRAZOVKA DNES ----------
+  function viewHome() {
+    var st = S(), cu = C.currentUnit(), prog = C.stageProgress(), streak = C.streakNow();
+    var weakN = Object.keys(st.weak).length, doneToday = st.lessonDone === C.today();
+    var h = '<div class="head"><div><div class="muted small">' + dateLabel() + '</div><h1>Dnes</h1></div>' +
+      '<div class="chip">Série ' + streak + ' ' + daysWord(streak) + '</div></div>';
+    if (V.msg) { h += '<div class="card note">' + esc(V.msg) + '</div>'; }
+    var L = C.laterState();
+    if (L) {
+      var ready = C.laterReady(), nL = L.items.length;
+      h += '<div class="card row' + (ready ? ' ready' : '') + '"><div><div class="card-s">' + (ready ? 'Čas na mluvení' : 'Mluvení odloženo') + '</div>' +
+        '<div class="small muted">' + nL + ' ' + vetWord(nL) + (ready ? ' k vyslovení' : ' · do ' + hm(L.due)) + '</div></div>' +
+        '<button type="button" class="' + (ready ? 'btn-sm' : 'btn-t') + '" data-act="later">Mluvit teď</button></div>';
+    }
+    if (!st.placementDone) {
+      h += '<div class="card"><div class="card-t">Vstupní test</div>' +
+        '<p class="muted">18 krátkých úloh, asi 5 minut. Podle výsledku nastavím obtížnost každého jevu. Do statistik se nepočítá.</p>' +
+        '<button type="button" class="btn" data-act="placement">Spustit vstupní test</button>' +
+        '<button type="button" class="btn-sec" data-act="skipplacement">Přeskočit, začít od začátku</button></div>';
+    }
+    var les = C.buildLesson(), nRev = 0, nGr = 0, nSp = 0;
+    var nDr = 0;
+    les.queue.forEach(function (e) { if (e.block === 'review') nRev++; else if (e.block === 'grammar') nGr++; else if (e.block === 'drill') nDr++; else nSp++; });
+    h += '<div class="card"><div class="row-b"><div class="card-t">Dnešní lekce</div><div class="muted small">' + les.queue.length + ' úloh</div></div>';
+    h += step(1, 'Opakování', nRev ? nRev + ' vět z minulých dní' : 'Dnes není co opakovat');
+    h += step(2, 'Gramatika dne', cu ? cu.code + ' ' + cu.title + ' · stupeň ' + C.effLvl(cu.id) : 'Etapa je hotová');
+    h += step(3, 'Pohotovost', nSp + ' překlady na čas' + (nDr ? ' a dril vzorů (' + nDr + ' kroků)' : ''));
+    h += step(4, 'Shrnutí', 'Chyby a co bylo procvičeno');
+    h += '<button type="button" class="btn" data-act="lesson">' + (doneToday ? 'Dnešní lekce je hotová. Další kolo' : 'Začít lekci') + '</button></div>';
+    h += '<div class="card"><div class="row-b"><div class="card-s">Etapa 1 ze 4</div><div class="muted small">' + prog.done + ' z ' + prog.total + ' jevů zvládnuto</div></div>' +
+      '<div class="bar"><div class="bar-in" style="width:' + Math.round(prog.done / Math.max(1, prog.total) * 100) + '%"></div></div>' +
+      '<div class="muted small">' + STAGES[0].title + '</div></div>';
+    if (weakN) {
+      h += '<div class="card warn row-b"><div><div class="card-s">Co mi nejde</div><div class="small">' + weakN + ' vět čeká na opakování</div></div>' +
+        '<button type="button" class="btn-warn" data-act="weak">Zopakovat</button></div>';
+    }
+    return page(h);
+  }
+  function step(n, t, s) {
+    return '<div class="step"><div class="step-n">' + n + '</div><div><div class="card-s">' + t + '</div><div class="muted small">' + esc(s) + '</div></div></div>';
+  }
+
+  // ---------- 4. OBRAZOVKA MAPA A DETAIL JEVU ----------
+  function viewMap() {
+    var done = C.stageProgress().done;
+    var h = '<div class="head"><div><h1>Mapa gramatiky</h1><div class="muted small">' + done + ' z 36 jevů zvládnuto</div></div></div>';
+    h += '<div class="legend">' + ['done', 'firming', 'learning', 'new'].map(function (k) { return '<span><i class="cell st-' + k + '"></i>' + STATUS[k] + '</span>'; }).join('') + '</div>';
+    STAGES.forEach(function (sg) {
+      var cells = '';
+      if (sg.n === 1) {
+        C.UNITS.forEach(function (u) {
+          var us = C.unitState(u.id);
+          cells += '<button type="button" class="cell st-' + us.status + '" data-act="unit" data-u="' + u.id + '" aria-label="' + esc(u.code + ' ' + u.title + ', ' + STATUS[us.status]) + '">' + u.code + '</button>';
+        });
+      } else {
+        for (var i = 0; i < 9; i++) cells += '<span class="cell st-new">' + (sg.first + Math.floor(i / 3)) + 'ABC'.charAt(i % 3) + '</span>';
+      }
+      h += '<div class="card"><div class="row-b"><div class="card-s">Etapa ' + sg.n + ' · ' + sg.title + '</div><div class="muted small">' + (sg.n === 1 ? done + ' / 9' : 'připravuje se') + '</div></div><div class="cells">' + cells + '</div>';
+      if (sg.n === 1) {
+        C.UNITS.forEach(function (u) {
+          var us = C.unitState(u.id);
+          if (us.status === 'learning' || us.status === 'firming') {
+            h += '<button type="button" class="urow" data-act="unit" data-u="' + u.id + '"><span><b>' + u.code + ' ' + esc(u.title) + '</b><br><span class="muted small">' + STATUS[us.status] + ' · stupeň ' + C.effLvl(u.id) + '</span></span><b>' + (us.all.length ? C.unitAcc(u.id) + ' %' : '') + '</b></button>';
+          }
+        });
+      }
+      h += '</div>';
+    });
+    return page(h);
+  }
+  function viewUnit() {
+    var u = C.UNIT_BY_ID[V.unitId], us = C.unitState(u.id), lvl = V.trainLvl || C.effLvl(u.id);
+    var h = '<div class="head"><button type="button" class="icon-b" data-act="go" data-v="map" aria-label="Zpět na mapu">' + icon('back') + '</button>' +
+      '<div class="grow"><h1 class="h2">' + u.code + ' ' + esc(u.title) + '</h1><div class="muted small">' + STATUS[us.status] + (us.all.length ? ' · úspěšnost ' + C.unitAcc(u.id) + ' %' : '') + '</div></div></div>';
+    h += '<div class="card"><div class="card-s">Pravidlo</div><p>' + esc(u.rule) + '</p></div>';
+    h += '<div class="card"><div class="card-s">Procvičit</div><div class="seg">' + [1, 2, 3].map(function (L) {
+      return '<button type="button" class="seg-b' + (L === lvl ? ' on' : '') + '" data-act="trainlvl" data-l="' + L + '">Stupeň ' + L + '</button>';
+    }).join('') + '</div><p class="muted small">1 výběr ze dvou · 2 doplnění tvaru · 3 překlad z češtiny</p>' +
+      '<button type="button" class="btn" data-act="trainunit">Spustit 8 úloh</button>' +
+      (C.DRILL_OF_UNIT[u.id] ? '<button type="button" class="btn-sec" data-act="drill" data-u="' + u.id + '">' + icon('mic', 18) + 'Dril vzorů (5 kroků nahlas)</button>' : '') + '</div>';
+    if (u.explain) h += '<h2>Výklad</h2>' + explainBody(u, null);
+    return page(h);
+  }
+
+  // ---------- 5. OBRAZOVKA TRENINK ----------
+  // ---------- 5B. OBRAZOVKA PISNE ----------
+  var SONG_TABS = [['about', 'O písni'], ['quiz', 'Porozumění'], ['words', 'Slovíčka'], ['grammar', 'Gramatika'], ['practice', 'Procvičit']];
+  function viewSongs() {
+    var h = '<div class="head"><div><h1>Písně</h1><div class="muted small">Angličtina z písní, které máš rád</div></div></div>';
+    C.SONGS.forEach(function (s) {
+      var p = C.songProgress(s.id);
+      h += '<button type="button" class="card songc" data-act="song" data-s="' + s.id + '"><div class="row-b"><div><div class="card-t">' + esc(s.title) + '</div>' +
+        '<div class="muted small">' + esc(s.artist) + ' · ' + s.year + ' · úroveň ' + esc(s.level) + '</div></div><span class="song-ic">' + icon('music', 26) + '</span></div>' +
+        '<div class="small">Porozumění ' + p.qOk + ' / ' + p.qTotal + ' · Procvičeno ' + p.done + ' / ' + p.total + '</div></button>';
+    });
+    h += '<p class="muted small">Texty písní v aplikaci nejsou kvůli autorským právům. Otevřeš je odkazem na Genius, Spotify nebo YouTube.</p>';
+    return page(h);
+  }
+  // Stabilni poradi moznosti (nezavisle na prekresleni)
+  function quizOrder(q) {
+    var n = q.opts.length, sh = 0, i, out = [];
+    for (i = 0; i < q.id.length + q.q.length; i++) sh += (q.q.charCodeAt(i % q.q.length) || 0);
+    for (i = 0; i < n; i++) out.push((i + sh) % n);
+    return out;
+  }
+  function viewSong() {
+    var s = C.SONG_BY_ID[V.songId], tab = V.songTab || 'about', st = C.songState(s.id), p = C.songProgress(s.id);
+    var h = '<div class="head"><button type="button" class="icon-b" data-act="go" data-v="songs" aria-label="Zpět na písně">' + icon('back') + '</button>' +
+      '<div class="grow"><h1 class="h2">' + esc(s.title) + '</h1><div class="muted small">' + esc(s.artist) + ' · ' + esc(s.album) + ' (' + s.year + ') · úroveň ' + esc(s.level) + '</div></div></div>';
+    h += '<div class="chiprow" role="tablist">' + SONG_TABS.map(function (t) {
+      return '<button type="button" role="tab" class="chip-b' + (t[0] === tab ? ' on' : '') + '" data-act="songtab" data-t="' + t[0] + '"' + (t[0] === tab ? ' aria-selected="true"' : '') + '>' + t[1] + '</button>';
+    }).join('') + '</div>';
+    if (tab === 'about') {
+      h += '<div class="card"><div class="card-s">O čem píseň je</div><p>' + esc(s.summary) + '</p><div class="muted small">Nálada: ' + esc(s.mood) + '</div></div>';
+      h += '<div class="card"><div class="card-s">Poslech a text</div><p class="small muted">Text písně v aplikaci není (autorská práva). Otevři si ho vedle a poslouchej.</p>' +
+        [['genius', 'Text na Genius'], ['spotify', 'Poslech na Spotify'], ['youtube', 'Video s textem na YouTube']].map(function (l) {
+          return '<a class="btn-sec" href="' + esc(s.links[l[0]]) + '" target="_blank" rel="noopener">' + icon('ext', 18) + l[1] + '</a>';
+        }).join('') + '</div>';
+      h += '<div class="card"><div class="card-s">Jak s písní pracovat</div><ol class="ex">' +
+        '<li>Poslechni si píseň jednou bez textu. Co pochytíš?</li><li>Pusť si ji znovu s textem na Genius nebo YouTube.</li>' +
+        '<li>Odpověz na otázky v záložce Porozumění.</li><li>Projdi Slovíčka a Gramatiku, ulož si, co chceš umět.</li>' +
+        '<li>Procvič věty a poslechni si píseň potřetí. Rozumíš víc?</li></ol></div>';
+    } else if (tab === 'quiz') {
+      h += '<p class="small muted">Odpovídej po poslechu. Správně: ' + p.qOk + ' / ' + p.qTotal + '</p>';
+      s.quiz.forEach(function (q, i) {
+        var ch = st.quiz[q.id], answered = ch !== undefined;
+        h += '<div class="card"><div class="card-s">' + (i + 1) + '. ' + esc(q.q) + '</div><div class="opts">';
+        quizOrder(q).forEach(function (k) {
+          if (!answered) h += '<button type="button" class="opt opt-s" data-act="quiz" data-q="' + q.id + '" data-k="' + k + '">' + esc(q.opts[k]) + '</button>';
+          else h += '<div class="opt opt-s ' + (k === q.ans ? 'right' : (k === ch ? 'wrong' : 'dim')) + '">' + esc(q.opts[k]) + '</div>';
+        });
+        h += '</div>';
+        if (answered) h += '<div class="small"><b>' + (ch === q.ans ? 'Správně.' : 'Ne tak docela.') + '</b> ' + esc(q.why) + '</div>';
+        h += '</div>';
+      });
+      if (Object.keys(st.quiz).length) h += '<button type="button" class="btn-sec" data-act="quizreset">Zkusit otázky znovu</button>';
+    } else if (tab === 'words') {
+      h += '<p class="small muted">Zajímavá slova a fráze z písně. Uložená najdeš v Přehledu v Moje slovíčka.</p><div class="card">';
+      s.words.forEach(function (w) {
+        var key = w.en.toLowerCase(), saved = S().words[key] && S().words[key].saved;
+        h += '<div class="pit"><div class="row-b"><div><b>' + esc(w.en) + '</b> · ' + esc(w.cz) + '</div>' +
+          '<div class="wbtns">' + (A.canSpeak() ? '<button type="button" class="icon-b" data-act="sayw" data-t="' + esc(w.en + '. ' + w.ex) + '" aria-label="Přehrát">' + icon('sound', 18) + '</button>' : '') +
+          '<button type="button" class="btn-t" data-act="savew" data-w="' + esc(key) + '"' + (saved ? ' disabled' : '') + '>' + (saved ? 'Uloženo' : 'Uložit') + '</button></div></div>' +
+          '<div class="muted small">' + esc(w.note) + '</div><div class="small"><i>' + esc(w.ex) + '</i></div></div>';
+      });
+      h += '</div>';
+    } else if (tab === 'grammar') {
+      h += '<p class="small muted">Jaká gramatika se v písni objevuje. Příklady jsou vlastní, ne z textu písně.</p>';
+      s.grammar.forEach(function (g) {
+        var has = g.u && C.UNIT_BY_ID[g.u];
+        h += '<div class="card"><div class="row-b"><div class="card-s">' + esc(g.t) + '</div>' + (g.code !== '–' ? '<span class="pill">' + esc(g.code) + '</span>' : '') + '</div>' +
+          '<p class="small"><b>V písni:</b> ' + esc(g.inSong) + '</p><p class="small"><b>Příklad:</b> <i>' + esc(g.ex) + '</i></p>' +
+          (has ? '<button type="button" class="btn-t" data-act="songexp" data-u="' + g.u + '">' + icon('book', 18) + 'Výklad ' + esc(g.code) + '</button>' :
+            '<div class="muted small">' + (g.later.indexOf('etapa') === 0 ? 'Probereš později: ' : 'Poznámka: ') + esc(g.later) + '</div>') + '</div>';
+      });
+    } else {
+      h += '<div class="card"><div class="card-s">Procvičit gramatiku z písně</div><p class="small muted">' + s.items.length + ' vět ve třech stupních na gramatiku, která se v písni objevuje. Věty jsou vlastní, ne z textu písně. Chyby se zařadí do Co mi nejde a do opakování.</p>' +
+        '<div class="bar"><div class="bar-in" style="width:' + Math.round(p.done / Math.max(1, p.total) * 100) + '%"></div></div><div class="small">Procvičeno ' + p.done + ' / ' + p.total + '</div>' +
+        '<button type="button" class="btn" data-act="songpractice">Spustit</button></div>';
+    }
+    return page(h);
+  }
+
+  function viewTrain() {
+    var weakN = Object.keys(S().weak).length;
+    var h = '<div class="head"><div><h1>Trénink</h1><div class="muted small">Cokoli mimo denní lekci</div></div></div>';
+    h += '<div class="card"><div class="card-s">Pohotovost</div><p class="muted small">8 překladů z češtiny na čas, nahlas nebo písemně.</p><button type="button" class="btn" data-act="speed">Spustit</button></div>';
+    h += '<div class="card"><div class="card-s">Co mi nejde</div><p class="muted small">' + (weakN ? weakN + ' vět s chybou. Zmizí po dvou správných odpovědích.' : 'Zatím žádné chyby.') + '</p>' +
+      '<button type="button" class="btn-sec" data-act="weak"' + (weakN ? '' : ' disabled') + '>Zopakovat slabiny</button></div>';
+    if (C.DRILLS.length) {
+      h += '<div class="card"><div class="card-s">Dril vzorů</div><p class="muted small">Jedna věta a pět rychlých obměn: jiná osoba, čas, zápor, otázka. Každou obměnu řekni nahlas, ať vzorec naskočí sám.</p>';
+      C.DRILLS.forEach(function (d) {
+        var du = C.UNIT_BY_ID[d.u];
+        h += '<button type="button" class="urow" data-act="drill" data-u="' + d.u + '"><span><b>' + du.code + ' ' + esc(du.title) + '</b><br><span class="muted small">' + esc(d.en) + '</span></span>' + icon('mic', 20) + '</button>';
+      });
+      h += '</div>';
+    }
+    h += '<div class="card"><div class="card-s">Jednotlivé jevy</div>';
+    C.UNITS.forEach(function (u) {
+      var us = C.unitState(u.id);
+      h += '<button type="button" class="urow" data-act="unit" data-u="' + u.id + '"><span><b>' + u.code + ' ' + esc(u.title) + '</b><br><span class="muted small">' + STATUS[us.status] + '</span></span><i class="cell st-' + us.status + '"></i></button>';
+    });
+    h += '</div>';
+    return page(h);
+  }
+
+  // ---------- 6. OBRAZOVKA PREHLED ----------
+  function viewOverview() {
+    var st = S(), t = C.totals(), weakIds = Object.keys(st.weak);
+    var h = '<div class="head"><div><h1>Přehled</h1><div class="muted small">Statistiky, slabiny, slovíčka, nastavení</div></div></div>';
+    h += '<div class="tiles"><div class="tile"><span>Úloh</span><b>' + t.n + '</b></div><div class="tile"><span>Úspěšnost</span><b>' + t.acc + ' %</b></div><div class="tile"><span>Reakce</span><b>' + String(t.avgSec).replace('.', ',') + ' s</b></div></div>';
+    h += '<div class="card"><div class="row-b"><div class="card-s">Co mi nejde (' + weakIds.length + ')</div>' + (weakIds.length ? '<button type="button" class="btn-warn" data-act="weak">Zopakovat</button>' : '') + '</div>';
+    if (!weakIds.length) h += '<p class="muted small">Věta se sem dostane po první chybě a zmizí po dvou správných odpovědích.</p>';
+    weakIds.slice(0, 20).forEach(function (id) {
+      var it = C.ITEM_BY_ID[id]; if (!it) return;
+      var u = C.UNIT_BY_ID[C.UNIT_OF_ITEM[id]];
+      h += '<div class="err"><div class="muted small">' + u.code + ' · ' + esc(u.title) + '</div><div>' + esc(it.type === 'translate' ? it.cz : it.en) + '</div><div class="small"><b>Správně:</b> ' + esc(C.correctList(it)[0]) + '</div></div>';
+    });
+    h += '</div>';
+    var words = Object.keys(st.words).sort(function (a, b) { return (st.words[b].saved ? 100 : 0) + st.words[b].n - (st.words[a].saved ? 100 : 0) - st.words[a].n; });
+    h += '<div class="card"><div class="card-s">Moje slovíčka (' + words.length + ')</div>';
+    if (!words.length) h += '<p class="muted small">Ťukni ve cvičení na anglické slovo, ukáže se překlad. Hledaná a uložená slova se objeví tady.</p>';
+    words.slice(0, 40).forEach(function (w) {
+      h += '<div class="wrow"><span><b>' + esc(w) + '</b> · ' + esc((window.TG_DICT || {})[w] || '') + '</span><span class="muted small">' + (st.words[w].saved ? 'uloženo' : 'hledáno ' + st.words[w].n + '×') + '</span></div>';
+    });
+    h += '</div>';
+    var off = st.settings.offset || 0;
+    var thm = st.settings.theme || 'light', fnt = st.settings.font || 1;
+    h += '<div class="card"><div class="card-s">Nastavení</div>' +
+      '<div class="set-l">Vzhled</div><div class="seg">' + [['light', 'Světlý'], ['dark', 'Tmavý'], ['auto', 'Podle telefonu']].map(function (o) {
+        return '<button type="button" class="seg-b' + (o[0] === thm ? ' on' : '') + '" data-act="theme" data-o="' + o[0] + '"' + (o[0] === thm ? ' aria-pressed="true"' : '') + '>' + o[1] + '</button>';
+      }).join('') + '</div>' +
+      '<div class="set-l">Velikost písma</div><div class="seg">' + [[1, 'Normální'], [1.1, 'Větší'], [1.2, 'Největší']].map(function (o) {
+        return '<button type="button" class="seg-b' + (o[0] === fnt ? ' on' : '') + '" data-act="font" data-o="' + o[0] + '"' + (o[0] === fnt ? ' aria-pressed="true"' : '') + '>' + o[1] + '</button>';
+      }).join('') + '</div>' +
+      '<div class="set-l">Celková obtížnost</div><div class="seg">' + [[-1, 'Lehčí'], [0, 'Normální'], [1, 'Těžší']].map(function (o) {
+        return '<button type="button" class="seg-b' + (o[0] === off ? ' on' : '') + '" data-act="offset" data-o="' + o[0] + '"' + (o[0] === off ? ' aria-pressed="true"' : '') + '>' + o[1] + '</button>';
+      }).join('') + '</div>' +
+      '<button type="button" class="btn-sec" data-act="voice">Čtení správné odpovědi nahlas: ' + (st.settings.voice ? 'zapnuto' : 'vypnuto') + '</button>' +
+      '<button type="button" class="btn-sec" data-act="placement">Spustit vstupní test znovu</button>' +
+      '<button type="button" class="btn-sec" data-act="export">Záloha: stáhnout soubor</button>' +
+      '<label class="btn-sec filelab">Záloha: nahrát soubor<input type="file" id="importFile" accept="application/json,.json"></label>' +
+      '<button type="button" class="btn-sec danger" data-act="reset">' + (V.resetArmed ? 'Opravdu smazat veškerý pokrok? Ťukni znovu' : 'Smazat pokrok') + '</button>' +
+      (V.msg ? '<p class="small">' + esc(V.msg) + '</p>' : '') + '</div>' +
+      '<p class="muted small center">Trenér gramatiky · verze ' + C.CONFIG.appVersion + '</p>';
+    return page(h);
+  }
+
+  // ---------- 7. CVICENI (vykresleni ulohy) ----------
+  function cur() { return ses.queue[ses.idx]; }
+  function viewSession() {
+    var e = cur(), it = e.item, u = C.UNIT_BY_ID[e.unitId], total = ses.queue.length;
+    if (ses.explain) return explainPage(e.unitId, it, ses.phase === 'feedback' ? ses.last : null, 'explainclose', 'Zpět k úloze');
+    var lvlNow = it.lvl;
+    var h = '<main class="page sess"><div class="top"><button type="button" class="icon-b" data-act="quit" aria-label="Ukončit cvičení">' + icon('close', 20) + '</button>' +
+      '<div class="bar grow"><div class="bar-in" style="width:' + Math.round(ses.idx / total * 100) + '%"></div></div><div class="muted small">' + (ses.idx + 1) + ' / ' + total + '</div></div>';
+    h += '<div class="row-b"><div class="muted small">' + BLOCK[e.block] + (e.block === 'speed' ? '' : ' · ' + u.code + ' ' + esc(u.title)) + '</div><div class="pill">' + (it.drill ? 'Krok ' + it.step + ' / ' + it.steps : 'Stupeň ' + lvlNow) + '</div></div>';
+    if (ses.flash) h += '<div class="card note small">' + esc(ses.flash) + '</div>';
+    // 7.1 Zadani
+    h += '<div class="card">';
+    if (it.type === 'choice') h += '<div class="muted">Vyber správný tvar.</div><div class="sent">' + enText(it.en) + '</div>';
+    else if (it.type === 'gap') h += '<div class="muted">Doplň chybějící slova.</div><div class="sent">' + enText(it.en) + '</div>';
+    else if (it.drill) {
+      h += '<div class="muted">Změň větu podle zadání a řekni ji nahlas.</div><div class="drill-base">' + enText(it.base) + '</div>' +
+        (it.baseCz ? '<div class="muted small">' + esc(it.baseCz) + '</div>' : '') +
+        '<div class="cue"><span class="cue-l">Změna</span><span>' + esc(it.cue) + '</span></div>';
+    } else {
+      h += '<div class="muted">Řekni nebo napiš anglicky.</div><div class="sent">' + esc(it.cz) + '</div>';
+      if (e.timed && ses.phase === 'ask' && !ses.deferOpen) h += '<div class="tbar"><div class="bar t"><div class="bar-in" id="tfill" style="width:100%"></div></div><div class="tlabel" id="tlabel"></div></div>';
+    }
+    h += bubble();
+    if (ses.ruleOpen) h += '<div class="rule"><b>Pravidlo:</b> ' + esc(u.rule) + (u.explain ? '<button type="button" class="link-b" data-act="explainopen">Celý výklad</button>' : '') + '</div>';
+    if (ses.hint && ses.phase === 'ask') h += '<div class="rule"><b>' + (ses.hintStep === 1 ? 'Kostra věty' : 'Nápověda') + ':</b> ' + esc(ses.hint) +
+      (ses.hintStep === 1 ? '<div class="muted small">Kostra se nepočítá jako chyba, další nápověda ano.</div>' : '') + '</div>';
+    h += '</div>';
+    // 7.2 Odpoved nebo vyhodnoceni
+    if (ses.phase === 'ask') h += askArea(e, it); else h += feedback(e, it);
+    h += '</main>';
+    return h;
+  }
+  function remainingSpeech() { return ses.queue.slice(ses.idx).filter(function (x) { return x.item.type === 'translate' && !x.item.drill; }); }
+  function deferPanel() {
+    var n = remainingSpeech().length;
+    return '<div class="card"><div class="card-s">Odložit mluvení</div>' +
+      '<p class="muted small">Odloží ' + n + ' ' + vetWord(n) + ' k vyslovení z tohoto cvičení. Ostatní úlohy pokračují hned, odložené věty počkají na obrazovce Dnes.</p>' +
+      '<div class="small">Za kolik minut</div><div class="tools four">' + [5, 10, 15, 20].map(function (m) {
+        return '<button type="button" class="btn-t" data-act="defer" data-m="' + m + '">' + m + ' min</button>';
+      }).join('') + '</div>' +
+      '<button type="button" class="btn-sec" data-act="defer" data-m="0">Až budu moct</button>' +
+      '<button type="button" class="btn-sec" data-act="deferclose">Zpět k úloze</button></div>';
+  }
+  function askArea(e, it) {
+    var h = '';
+    if (it.type === 'translate' && ses.deferOpen) return deferPanel();
+    if (it.type === 'choice') {
+      h += '<div class="opts">' + e.opts.map(function (o) { return '<button type="button" class="opt" data-act="choose" data-a="' + esc(o) + '">' + esc(o) + '</button>'; }).join('') + '</div>';
+    } else if (it.type === 'gap') {
+      h += '<div class="inputs">' + it.ans.map(function (a, i) {
+        return '<label class="lab" for="g' + i + '">' + (it.ans.length > 1 ? (i + 1) + '. mezera' : 'Tvoje odpověď') + '</label><input class="inp" id="g' + i + '" data-gap="' + i + '" type="text" enterkeyhint="' + (i + 1 < it.ans.length ? 'next' : 'done') + '" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" value="' + esc(ses.draft[i] || '') + '">';
+      }).join('') + '</div>';
+    } else {
+      if (A.canListen()) {
+        h += '<div class="micwrap"><button type="button" class="mic' + (ses.listening ? ' on' : '') + '" data-act="mic" aria-label="Mluvit do mikrofonu">' + icon('mic', 40) + '</button><div class="card-s">' + (ses.listening ? 'Poslouchám' : (ses.micErr || 'Ťukni a mluv')) + '</div></div>';
+      } else {
+        h += '<p class="muted small">Mikrofon tady není dostupný (potřebuje Chrome a adresu https). Odpověď napiš.</p>';
+      }
+      if (ses.kind !== 'placement' && !it.drill) h += '<button type="button" class="btn-sec" data-act="deferopen">Teď nemůžu mluvit</button>';
+      h += '<div class="inputs"><label class="lab" for="g0">Tvoje odpověď</label><input class="inp" id="g0" data-gap="0" type="text" enterkeyhint="done" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" value="' + esc(ses.draft[0] || '') + '"></div>';
+    }
+    if (it.type !== 'choice') h += '<button type="button" class="btn" data-act="check">Zkontrolovat</button>';
+    if (e.block !== 'placement') {
+      h += '<div class="tools"><button type="button" class="btn-t" data-act="rule">Pravidlo</button><button type="button" class="btn-t" data-act="hint"' + (ses.hintStep >= 3 ? ' disabled' : '') + '>' + (ses.hintStep ? 'Další nápověda' : 'Nápověda') + '</button><button type="button" class="btn-t" data-act="dunno">Nevím</button></div>';
+    } else {
+      h += '<div class="tools one"><button type="button" class="btn-t" data-act="dunno">Nevím</button></div>';
+    }
+    h += '<div class="grow"></div>';
+    if (e.block === 'grammar') {
+      h += '<div class="small muted">Obtížnost tohoto jevu</div><div class="tools two"><button type="button" class="btn-t" data-act="easier"' + (it.lvl <= 1 ? ' disabled' : '') + '>Lehčí</button><button type="button" class="btn-t" data-act="harder"' + (it.lvl >= 3 ? ' disabled' : '') + '>Těžší</button></div>';
+    }
+    return h;
+  }
+  function filled(it) {
+    if (it.type === 'translate') return C.correctList(it)[0];
+    var parts = it.type === 'choice' ? [it.ans] : it.ans.map(function (a) { return a.split('|')[0]; }), i = 0;
+    return it.en.replace(/___/g, function () { return parts[i++] || ''; }).replace(/\s*\([a-z ,]+\)/g, '');
+  }
+  function feedback(e, it) {
+    var r = ses.last, h = '<div class="fb ' + (r.ok ? 'ok' : 'bad') + '"><div class="fb-t">' + (r.ok ? 'Správně' : (r.dunno ? 'Nevím, počítá se jako chyba' : (r.helped ? 'S nápovědou se počítá jako chyba' : 'Chyba'))) + (r.slow ? ' · přes časový limit' : '') + '</div>';
+    if (!r.ok && r.your) h += '<div><b>Tvoje:</b> ' + esc(r.your) + '</div>';
+    h += '<div><b>Správně:</b> ' + enText(filled(it)) + '</div>';
+    if (it.type !== 'translate') h += '<div class="muted small">' + esc(it.cz) + '</div>';
+    else if (C.correctList(it).length > 1) h += '<div class="muted small">Také: ' + esc(C.correctList(it).slice(1).join(' / ')) + '</div>';
+    if (r.lvlChange) h += '<div class="small"><b>' + (r.lvlChange > 0 ? 'Jde ti to, příště těžší stupeň.' : 'Příště lehčí stupeň.') + '</b></div>';
+    h += '</div>';
+    h += shadowBox();
+    if (C.UNIT_BY_ID[e.unitId].explain) h += '<button type="button" class="btn-sec" data-act="explainopen">' + icon('book', 18) + (r.ok ? 'Vysvětlení gramatiky' : 'Proč? Vysvětlení gramatiky') + '</button>';
+    h += '<div class="tools ' + ((!r.ok && it.type === 'translate' && r.your && !r.helped) ? 'two' : 'one') + '">';
+    if (A.canSpeak()) h += '<button type="button" class="btn-t" data-act="say">' + icon('sound', 18) + ' Přehrát</button>';
+    if (!r.ok && it.type === 'translate' && r.your && !r.helped && e.block !== 'placement') h += '<button type="button" class="btn-t" data-act="wasright">Moje odpověď byla správně</button>';
+    h += '</div><div class="grow"></div><button type="button" class="btn" data-act="next">' + (ses.idx + 1 < ses.queue.length ? 'Další' : 'Dokončit') + '</button>';
+    return h;
+  }
+
+  // 7.3 Opakuj po mne: prehraje spravnou vetu, pak posloucha a porovna slova
+  function shadowBox() {
+    var sh = ses.shadow;
+    if (!sh) return '<button type="button" class="btn-sec" data-act="shadow">' + icon('mic', 18) + 'Opakuj po mně</button>';
+    var h = '<div class="card shadow">';
+    if (sh.state === 'play') h += '<div class="card-s">Poslouchej…</div>';
+    else if (sh.state === 'listen') h += '<div class="card-s">Teď to řekni ty</div><div class="muted small" id="shHeard">' + esc(sh.heard || 'Poslouchám…') + '</div>';
+    else if (sh.state === 'self') h += '<div class="card-s">Řekni větu nahlas 2× stejným rytmem.</div><div class="muted small">' + esc(sh.msg || 'Mikrofon tady není k dispozici, porovnej se sám.') + '</div>';
+    else {
+      var pct = Math.round(sh.score * 100);
+      h += '<div class="card-s">' + (sh.score >= 0.85 ? 'Výborně, sedí to.' : (sh.score >= 0.6 ? 'Skoro. Zkus to ještě jednou.' : 'Zkus to znovu, pomaleji.')) + ' ' + pct + ' %</div>' +
+        '<div class="shw">' + sh.words.map(function (w) { return '<span class="' + (w.ok ? 'sw-ok' : 'sw-miss') + '">' + esc(w.t) + '</span>'; }).join(' ') + '</div>' +
+        (sh.heard ? '<div class="muted small">Slyšel jsem: ' + esc(sh.heard) + '</div>' : '');
+    }
+    if (sh.state === 'result' || sh.state === 'self') h += '<button type="button" class="btn-t" data-act="shadow">' + icon('mic', 18) + 'Znovu</button>';
+    return h + '</div>';
+  }
+  // Porovnani slov (nejdelsi spolecna posloupnost po normalizaci)
+  function matchWords(target, heard) {
+    var tw = String(target).split(/\s+/).filter(Boolean), flat = [], owner = [], hn = C.norm(heard).split(' ').filter(Boolean), i, j;
+    tw.forEach(function (w, k) { C.norm(w).split(' ').filter(Boolean).forEach(function (t) { flat.push(t); owner.push(k); }); });
+    var n = flat.length, m = hn.length, dp = [];
+    for (i = 0; i <= n; i++) { dp.push([]); for (j = 0; j <= m; j++) dp[i].push(0); }
+    for (i = n - 1; i >= 0; i--) for (j = m - 1; j >= 0; j--) dp[i][j] = flat[i] === hn[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    var hit = [], okW = tw.map(function () { return true; }), cnt = 0;
+    for (i = 0; i < n; i++) hit.push(false);
+    i = 0; j = 0;
+    while (i < n && j < m) { if (flat[i] === hn[j]) { hit[i] = true; cnt++; i++; j++; } else if (dp[i + 1][j] >= dp[i][j + 1]) i++; else j++; }
+    hit.forEach(function (v, k) { if (!v) okW[owner[k]] = false; });
+    return { score: n ? cnt / n : 0, words: tw.map(function (t, k) { return { t: t, ok: okW[k] }; }) };
+  }
+  function startShadow() {
+    var target = filled(cur().item), token = {};
+    A.stop(); ses.shadow = { state: 'play', heard: '', token: token }; render();
+    function alive() { return ses && ses.shadow && ses.shadow.token === token; }
+    function finish() { var r = matchWords(target, ses.shadow.heard); ses.shadow.state = 'result'; ses.shadow.score = r.score; ses.shadow.words = r.words; render(); }
+    A.speak(target, function () {
+      if (!alive()) return;
+      if (!A.canListen()) { ses.shadow.state = 'self'; render(); return; }
+      ses.shadow.state = 'listen'; render();
+      A.listen({
+        onText: function (t) { if (!alive()) return; ses.shadow.heard = t; var el = document.getElementById('shHeard'); if (el) el.textContent = t; },
+        onEnd: function () { if (alive() && ses.shadow.state === 'listen') finish(); },
+        onError: function (code) {
+          if (!alive()) return;
+          if (code === 'no-speech') { finish(); return; }
+          ses.shadow.state = 'self';
+          ses.shadow.msg = (code === 'not-allowed' || code === 'service-not-allowed') ? 'Mikrofon není povolený, porovnej se sám.' : 'Mikrofon teď nefunguje, porovnej se sám.';
+          render();
+        }
+      });
+    });
+  }
+
+  // ---------- 8. CVICENI (logika) ----------
+  function startSession(def) {
+    if (!def.queue.length) { V.msg = 'Teď tu není nic k procvičení.'; render(); return; }
+    def.queue.forEach(function (e) { if (e.item.type === 'choice') e.opts = Math.random() < 0.5 ? e.item.opts.slice() : e.item.opts.slice().reverse(); });
+    ses = { kind: def.kind, queue: def.queue, idx: 0, results: [], lookups: [] };
+    V.view = 'session'; V.msg = ''; resetItem(); render();
+  }
+  function resetItem() {
+    stopTimer(); A.stop();
+    ses.phase = 'ask'; ses.draft = []; ses.hintStep = 0; ses.hint = ''; ses.ruleOpen = false; ses.bubble = null;
+    ses.listening = false; ses.micErr = ''; ses.slow = false; ses.startTs = Date.now(); ses.last = null;
+    ses.deferOpen = false; ses.flash = ''; ses.explain = false; ses.shadow = null; A.hush();
+  }
+  function readDraft() {
+    var ins = app.querySelectorAll('input[data-gap]');
+    for (var i = 0; i < ins.length; i++) ses.draft[+ins[i].getAttribute('data-gap')] = ins[i].value;
+  }
+  function startTimer() {
+    stopTimer();
+    var e = cur(); if (!e.timed || ses.phase !== 'ask' || ses.deferOpen || ses.explain) return;
+    var lim = C.speedLimitSec(e.item) * 1000;
+    function tick() {
+      var left = lim - (Date.now() - ses.startTs), f = document.getElementById('tfill'), l = document.getElementById('tlabel');
+      if (left <= 0) { ses.slow = true; if (f) f.style.width = '0%'; if (l) l.textContent = 'limit vypršel'; stopTimer(); return; }
+      if (f) f.style.width = Math.round(left / lim * 100) + '%';
+      if (l) l.textContent = 'zbývá ' + Math.ceil(left / 1000) + ' s';
+    }
+    tick(); timer = setInterval(tick, 250);
+  }
+  function stopTimer() { if (timer) { clearInterval(timer); timer = null; } }
+  function submit(answer, forcedWrong) {
+    var e = cur(), it = e.item, helped = ses.hintStep >= 2 || !!forcedWrong;
+    var ok = !helped && C.check(it, answer), ms = Date.now() - ses.startTs;
+    stopTimer(); A.stop(); ses.listening = false;
+    var your = forcedWrong ? '' : (Array.isArray(answer) ? answer.join(' ... ') : answer);
+    var out = (e.block === 'placement' || it.drill) ? { lvlChange: 0 } : C.record(it.id, ok, ms);
+    ses.last = { itemId: it.id, item: it, unitId: e.unitId, ok: ok, your: your, slow: ses.slow, helped: helped, dunno: !!forcedWrong, ms: ms, lvlChange: e.block === 'grammar' ? out.lvlChange : 0 };
+    ses.results.push(ses.last);
+    if (it.type === 'translate' && e.block !== 'placement') C.laterDone(it.id);
+    ses.phase = 'feedback'; ses.bubble = null;
+    if (S().settings.voice && e.block !== 'placement') A.speak(filled(it));
+    render();
+  }
+  // Napoveda po krocich: 1 kostra vety (zdarma), 2 zacatek odpovedi, 3 cela odpoved
+  function frameOf(e) {
+    var u = C.UNIT_BY_ID[e.unitId], p = (u && u.explain && e.item.why) ? pointOf(u.explain, e.item.why) : null;
+    return p && p.f ? p.f : '';
+  }
+  function hintFor(e, stepN) {
+    var it = e.item;
+    if (stepN === 1) return frameOf(e);
+    var full = it.type === 'translate' ? C.correctList(it)[0] : (it.type === 'choice' ? it.ans : it.ans.map(function (a) { return a.split('|')[0]; }).join(' ... '));
+    if (stepN >= 3) return full;
+    if (it.type === 'translate') return full.split(' ').slice(0, 2).join(' ') + ' …';
+    return full.split(' ... ').map(function (p) { return p.charAt(0) + '…'; }).join('  ');
+  }
+  function changeLvl(delta) {
+    var e = cur(), used = {};
+    ses.queue.forEach(function (x) { used[x.item.id] = 1; });
+    var newLvl = Math.max(1, Math.min(3, e.item.lvl + delta));
+    C.setManualLvl(e.unitId, delta);
+    var pick = C.pickItems(e.unitId, newLvl, 1, used)[0];
+    if (!pick || pick.lvl !== newLvl) pick = C.UNIT_BY_ID[e.unitId].items.filter(function (x) { return x.lvl === newLvl; })[0];
+    if (pick) {
+      e.item = pick;
+      if (pick.type === 'choice') e.opts = Math.random() < 0.5 ? pick.opts.slice() : pick.opts.slice().reverse();
+      // zbytek bloku gramatiky prepnout na novy stupen
+      for (var i = ses.idx + 1; i < ses.queue.length; i++) {
+        var q = ses.queue[i];
+        if (q.block === 'grammar' && q.unitId === e.unitId) {
+          used[e.item.id] = 1;
+          var p2 = C.pickItems(e.unitId, newLvl, 1, used)[0];
+          if (p2) { q.item = p2; used[p2.id] = 1; if (p2.type === 'choice') q.opts = p2.opts.slice(); }
+        }
+      }
+    }
+    resetItem(); render();
+  }
+  function doDefer(minutes) {
+    var ids = remainingSpeech().map(function (x) { return x.item.id; }), n = ids.length;
+    var L = C.deferItems(ids, minutes);
+    ses.deferredN = (ses.deferredN || 0) + n; ses.deferDue = L.due;
+    ses.queue = ses.queue.slice(0, ses.idx).concat(ses.queue.slice(ses.idx).filter(function (x) { return x.item.type !== 'translate'; }));
+    if (ses.idx >= ses.queue.length) { finishSession(); return; }
+    resetItem();
+    ses.flash = 'Odloženo: ' + n + ' ' + vetWord(n) + (L.due ? ' do ' + hm(L.due) : ' na později') + '. Pokračuješ dalšími úlohami.';
+    render();
+  }
+  function nextItem() {
+    if (ses.idx + 1 < ses.queue.length) { ses.idx++; resetItem(); render(); return; }
+    finishSession();
+  }
+  function finishSession() {
+    stopTimer(); A.stop();
+    if (ses.kind === 'placement') {
+      C.applyPlacement(ses.results);
+      var okN = ses.results.filter(function (r) { return r.ok; }).length;
+      V.msg = 'Vstupní test hotový: ' + okN + ' z ' + ses.results.length + ' správně. Obtížnost jevů je nastavená, najdeš ji v Mapě.';
+      ses = null; V.view = 'home'; render(); return;
+    }
+    if (ses.kind === 'lesson') C.finishLesson();
+    if (!ses.results.length) {
+      V.msg = ses.deferredN ? 'Mluvení odloženo: ' + ses.deferredN + ' ' + vetWord(ses.deferredN) + (ses.deferDue ? ' do ' + hm(ses.deferDue) : ' na později') + '.' : '';
+      ses = null; V.view = 'home'; render(); return;
+    }
+    lastSummary = { kind: ses.kind, results: ses.results, lookups: ses.lookups, deferredN: ses.deferredN || 0, deferDue: ses.deferDue || 0 };
+    ses = null; V.view = 'summary'; render();
+  }
+  function toggleMic() {
+    if (ses.listening) { A.stop(); ses.listening = false; readDraft(); render(); return; }
+    readDraft(); ses.listening = true; ses.micErr = ''; render();
+    A.listen({
+      onText: function (txt) { ses.draft[0] = txt; var inp = document.getElementById('g0'); if (inp) inp.value = txt; },
+      onEnd: function () { if (ses && ses.phase === 'ask') { ses.listening = false; readDraft(); render(); } },
+      onError: function (code) {
+        if (!ses) return;
+        ses.listening = false;
+        ses.micErr = code === 'not-allowed' || code === 'service-not-allowed' ? 'Mikrofon není povolený. Napiš odpověď.' : (code === 'no-speech' ? 'Nic jsem neslyšel. Zkus to znovu.' : 'Mikrofon teď nefunguje. Napiš odpověď.');
+        if (ses.phase === 'ask') { readDraft(); render(); }
+      }
+    });
+  }
+
+  // ---------- 9. SHRNUTI ----------
+  function viewSummary() {
+    var R = lastSummary.results, okN = 0, ms = 0, units = {}, errs = [], slow = 0;
+    R.forEach(function (r) { if (r.ok) okN++; else errs.push(r); if (r.slow) slow++; ms += r.ms; units[r.unitId || C.UNIT_OF_ITEM[r.itemId]] = 1; });
+    var streak = C.streakNow();
+    var h = '<main class="page sess"><div class="head"><div><h1>' + (lastSummary.kind === 'lesson' ? 'Lekce hotová' : 'Hotovo') + '</h1><div class="muted small">' + R.length + ' úloh · ' + Math.max(1, Math.round(ms / 60000)) + ' min</div></div></div>';
+    h += '<div class="tiles"><div class="tile"><span>Správně</span><b>' + okN + ' / ' + R.length + '</b></div><div class="tile"><span>Reakce</span><b>' + String(Math.round(ms / Math.max(1, R.length) / 100) / 10).replace('.', ',') + ' s</b></div><div class="tile"><span>Série</span><b>' + streak + ' ' + daysWord(streak) + '</b></div></div>';
+    h += '<h2>Chyby (' + errs.length + ')</h2>';
+    if (!errs.length) h += '<p class="muted">Bez chyby.</p>';
+    errs.forEach(function (r) {
+      var it = r.item || C.ITEM_BY_ID[r.itemId], u = C.UNIT_BY_ID[r.unitId || C.UNIT_OF_ITEM[r.itemId]];
+      h += '<div class="card err"><div class="muted small">' + u.code + ' · ' + esc(u.title) + (r.dunno ? ' · Nevím' : (r.helped ? ' · s nápovědou' : '')) + '</div>' +
+        (it.type === 'translate' ? '<div class="small">' + esc(it.cz) + '</div>' : '') +
+        (r.your ? '<div class="bad-t"><b>Tvoje:</b> ' + esc(r.your) + '</div>' : '') +
+        '<div><b>Správně:</b> ' + esc(filled(it)) + '</div><div class="muted small">' + esc(u.rule) + '</div>' +
+        (u.explain ? '<button type="button" class="btn-t" data-act="explainsum" data-r="' + R.indexOf(r) + '">' + icon('book', 18) + 'Vysvětlení</button>' : '') + '</div>';
+    });
+    if (slow) h += '<p class="muted small">Přes časový limit: ' + slow + ' vět. Do chyb se nepočítá.</p>';
+    if (lastSummary.deferredN) h += '<div class="card note small">Mluvení odloženo: ' + lastSummary.deferredN + ' ' + vetWord(lastSummary.deferredN) + (lastSummary.deferDue ? ' do ' + hm(lastSummary.deferDue) : ' na později') + '. Najdeš je na obrazovce Dnes.</div>';
+    h += '<h2>Procvičeno</h2><div class="chips">' + Object.keys(units).map(function (id) { var u = C.UNIT_BY_ID[id]; return '<span class="tag">' + u.code + ' ' + esc(u.title) + '</span>'; }).join('') + '</div>';
+    if (lastSummary.lookups.length) h += '<p class="muted small">Hledaná slovíčka: ' + esc(lastSummary.lookups.join(', ')) + '</p>';
+    h += '<div class="grow"></div>';
+    if (errs.length) h += '<button type="button" class="btn" data-act="repeaterr">Zopakovat chyby hned</button>';
+    h += '<button type="button" class="btn-sec" data-act="go" data-v="' + (lastSummary.kind === 'song' ? 'song' : 'home') + '">Zavřít</button></main>';
+    return h;
+  }
+
+  // ---------- 9B. VYKLAD GRAMATIKY ----------
+  function exList(ex) { return '<ul class="ex">' + ex.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>'; }
+  function pointOf(X, id) { for (var i = 0; i < X.points.length; i++) if (X.points[i].id === id) return X.points[i]; return null; }
+  // Cely vyklad jevu; hl = id pravidla, ktere se zvyrazni
+  function explainBody(u, hl) {
+    var X = u.explain;
+    if (!X) return '<div class="card"><p>' + esc(u.rule) + '</p></div>';
+    var h = '<div class="card"><p>' + esc(X.intro) + '</p></div>';
+    h += '<h2>Tvary</h2><div class="card">' + X.form.map(function (f) { return '<div class="xf"><div class="xf-k">' + esc(f.k) + '</div><div>' + esc(f.v) + '</div></div>'; }).join('') + '</div>';
+    h += '<h2>Pravidla</h2>' + X.points.map(function (p) {
+      return '<div class="card' + (p.id === hl ? ' hl' : '') + '"><div class="card-s">' + esc(p.t) + '</div><p class="small">' + esc(p.x) + '</p>' +
+        (p.f ? '<div class="small"><b>Kostra:</b> ' + esc(p.f) + '</div>' : '') + exList(p.ex) + '</div>';
+    }).join('');
+    h += '<h2>Časté chyby</h2><div class="card">' + X.pitfalls.map(function (p) {
+      return '<div class="pit"><div class="bad-t"><s>' + esc(p.bad) + '</s></div><div><b>' + esc(p.good) + '</b></div><div class="muted small">' + esc(p.why) + '</div></div>';
+    }).join('') + '</div>';
+    h += '<div class="card note"><div class="card-s">Rozdíl od češtiny</div><p class="small">' + esc(X.cz) + '</p></div>';
+    return h;
+  }
+  // Stranka vykladu s konkretni ulohou nahore (res = vysledek odpovedi, muze chybet)
+  function explainPage(unitId, item, res, backAct, backLabel) {
+    var u = C.UNIT_BY_ID[unitId], X = u.explain, p = (X && item && item.why) ? pointOf(X, item.why) : null;
+    var h = '<main class="page sess"><div class="head"><button type="button" class="icon-b" data-act="' + backAct + '" aria-label="' + esc(backLabel) + '">' + icon('back') + '</button>' +
+      '<div class="grow"><div class="muted small">Výklad</div><h1 class="h2">' + u.code + ' ' + esc(u.title) + '</h1></div></div>';
+    if (item && res) {
+      h += '<div class="card">' + (item.type === 'translate' ? '<div class="small muted">' + esc(item.cz) + '</div>' : '') +
+        (!res.ok && res.your ? '<div class="bad-t"><b>Tvoje:</b> ' + esc(res.your) + '</div>' : '') +
+        '<div><b>Správně:</b> ' + esc(filled(item)) + '</div></div>';
+    }
+    if (p) h += '<div class="card hl"><div class="small muted">Proč je to takhle</div><div class="card-s">' + esc(p.t) + '</div><p class="small">' + esc(p.x) + '</p>' +
+      (p.f ? '<div class="small"><b>Kostra:</b> ' + esc(p.f) + '</div>' : '') + exList(p.ex) + '</div>';
+    h += explainBody(u, null);
+    h += '<button type="button" class="btn" data-act="' + backAct + '">' + esc(backLabel) + '</button></main>';
+    return h;
+  }
+
+  // ---------- 10. UDALOSTI A START ----------
+  function render() {
+    var h;
+    if (V.view === 'session' && ses) h = viewSession();
+    else if (V.view === 'summary' && lastSummary) h = viewSummary();
+    else if (V.view === 'explain' && V.ex && V.ex.unitId) h = explainPage(V.ex.unitId, null, null, 'explainback', 'Zpět na písničku');
+    else if (V.view === 'explain' && lastSummary && V.ex) { var rr = lastSummary.results[V.ex.r]; h = explainPage(rr.unitId || C.UNIT_OF_ITEM[rr.itemId], rr.item || C.ITEM_BY_ID[rr.itemId], rr, 'explainback', 'Zpět na shrnutí'); }
+    else if (V.view === 'songs') h = viewSongs();
+    else if (V.view === 'song' && V.songId) h = viewSong();
+    else if (V.view === 'map') h = viewMap();
+    else if (V.view === 'unit' && V.unitId) h = viewUnit();
+    else if (V.view === 'train') h = viewTrain();
+    else if (V.view === 'overview') h = viewOverview();
+    else { V.view = 'home'; h = viewHome(); }
+    app.innerHTML = h;
+    scheduleDue();
+    var chipOn = app.querySelector('.chip-b.on');
+    if (chipOn) { try { chipOn.scrollIntoView({ block: 'nearest', inline: 'center' }); } catch (e) { /* nic */ } }
+    if (V.view === 'session' && ses && ses.phase === 'ask') {
+      startTimer();
+      var first = app.querySelector('input[data-gap]');
+      if (first && cur().item.type === 'gap' && !ses.bubble && !ses.ruleOpen) { try { first.focus({ preventScroll: true }); } catch (e) { /* nic */ } }
+    }
+  }
+  function onClick(ev) {
+    var el = ev.target.closest('[data-act]'); if (!el || el.disabled) return;
+    var act = el.getAttribute('data-act');
+    if (act !== 'reset') V.resetArmed = false;
+    switch (act) {
+      case 'go': V.view = el.getAttribute('data-v'); V.msg = ''; V.trainLvl = 0; render(); break;
+      case 'lesson': startSession(C.buildLesson()); break;
+      case 'placement': startSession(C.buildPlacement()); break;
+      case 'skipplacement': S().placementDone = true; C.save(); render(); break;
+      case 'weak': startSession(C.buildWeak()); break;
+      case 'speed': startSession(C.buildSpeed()); break;
+      case 'unit': V.unitId = el.getAttribute('data-u'); V.trainLvl = 0; V.view = 'unit'; render(); break;
+      case 'trainlvl': V.trainLvl = +el.getAttribute('data-l'); render(); break;
+      case 'trainunit': startSession(C.buildTraining(V.unitId, V.trainLvl || C.effLvl(V.unitId))); break;
+      case 'offset': S().settings.offset = +el.getAttribute('data-o'); C.save(); render(); break;
+      case 'theme': S().settings.theme = el.getAttribute('data-o'); C.save(); applyLook(); render(); break;
+      case 'font': S().settings.font = +el.getAttribute('data-o'); C.save(); applyLook(); render(); break;
+      case 'voice': S().settings.voice = !S().settings.voice; C.save(); render(); break;
+      case 'export': doExport(); break;
+      case 'reset':
+        if (V.resetArmed) { C.resetAll(); V.resetArmed = false; V.msg = 'Pokrok je smazaný.'; } else { V.resetArmed = true; }
+        render(); break;
+      case 'quit': stopTimer(); A.stop(); ses = null; V.view = 'home'; render(); break;
+      case 'word':
+        readDraft(); var w = el.getAttribute('data-w');
+        ses.bubble = ses.bubble === w ? null : w;
+        if (ses.bubble) { C.lookup(w, false); if (ses.lookups.indexOf(w) < 0) ses.lookups.push(w); }
+        render(); break;
+      case 'saveword': readDraft(); C.lookup(el.getAttribute('data-w'), true); render(); break;
+      case 'rule': readDraft(); ses.ruleOpen = !ses.ruleOpen; render(); break;
+      case 'hint': readDraft(); ses.hintStep = Math.min(3, ses.hintStep + 1); if (ses.hintStep === 1 && !frameOf(cur())) ses.hintStep = 2; ses.hint = hintFor(cur(), ses.hintStep); render(); break;
+      case 'dunno': submit(null, true); break;
+      case 'choose': submit(el.getAttribute('data-a')); break;
+      case 'check': readDraft(); submit(cur().item.type === 'gap' ? cur().item.ans.map(function (a, i) { return ses.draft[i] || ''; }) : (ses.draft[0] || '')); break;
+      case 'easier': changeLvl(-1); break;
+      case 'harder': changeLvl(1); break;
+      case 'mic': toggleMic(); break;
+      case 'shadow': startShadow(); break;
+      case 'drill': startSession(C.buildDrill(el.getAttribute('data-u'))); break;
+      case 'deferopen': readDraft(); stopTimer(); A.stop(); ses.listening = false; ses.deferOpen = true; render(); break;
+      case 'deferclose': ses.deferOpen = false; ses.startTs = Date.now(); ses.slow = false; render(); break;
+      case 'defer': doDefer(+el.getAttribute('data-m')); break;
+      case 'later': startSession(C.buildLater()); break;
+      case 'explainopen':
+        if (ses.phase === 'ask') { readDraft(); stopTimer(); A.stop(); ses.listening = false; }
+        ses.explain = true; render(); window.scrollTo(0, 0); break;
+      case 'explainclose':
+        ses.explain = false;
+        if (ses.phase === 'ask') { ses.startTs = Date.now(); ses.slow = false; }
+        render(); window.scrollTo(0, 0); break;
+      case 'explainsum': V.ex = { r: +el.getAttribute('data-r'), back: 'summary' }; V.view = 'explain'; render(); window.scrollTo(0, 0); break;
+      case 'explainback': V.view = (V.ex && V.ex.back) || 'summary'; render(); break;
+      case 'song': V.songId = el.getAttribute('data-s'); V.songTab = 'about'; V.view = 'song'; render(); window.scrollTo(0, 0); break;
+      case 'songtab': V.songTab = el.getAttribute('data-t'); render(); break;
+      case 'quiz': C.answerQuiz(V.songId, el.getAttribute('data-q'), +el.getAttribute('data-k')); render(); break;
+      case 'quizreset': C.resetQuiz(V.songId); render(); window.scrollTo(0, 0); break;
+      case 'sayw': A.speak(el.getAttribute('data-t')); break;
+      case 'savew': C.lookup(el.getAttribute('data-w'), true); render(); break;
+      case 'songexp': V.ex = { unitId: el.getAttribute('data-u'), back: 'song' }; V.view = 'explain'; render(); window.scrollTo(0, 0); break;
+      case 'songpractice': startSession(C.buildSong(V.songId)); break;
+      case 'say': A.speak(filled(cur().item)); break;
+      case 'wasright':
+        C.addVariant(ses.last.itemId, ses.last.your); ses.last.ok = true;
+        if (!ses.last.item.drill) C.record(ses.last.itemId, true, 0);
+        render(); break;
+      case 'next': nextItem(); break;
+      case 'repeaterr':
+        var q = lastSummary.results.filter(function (r) { return !r.ok; }).map(function (r) { return { item: r.item || C.ITEM_BY_ID[r.itemId], unitId: r.unitId || C.UNIT_OF_ITEM[r.itemId], block: r.item && r.item.drill ? 'drill' : 'review', timed: false }; });
+        startSession({ kind: 'weak', queue: q }); break;
+    }
+  }
+  function onKey(ev) {
+    if (ev.key !== 'Enter' || V.view !== 'session' || !ses) return;
+    if (ses.phase === 'ask' && ev.target.matches && ev.target.matches('input[data-gap]')) {
+      ev.preventDefault();
+      var ins = app.querySelectorAll('input[data-gap]'), i = +ev.target.getAttribute('data-gap');
+      if (i + 1 < ins.length) ins[i + 1].focus(); else { var b = app.querySelector('[data-act="check"]'); if (b) b.click(); }
+    }
+  }
+  function onChange(ev) {
+    if (ev.target.id !== 'importFile' || !ev.target.files[0]) return;
+    var fr = new FileReader();
+    fr.onload = function () {
+      try { C.importSave(String(fr.result)); V.msg = 'Záloha je nahraná.'; } catch (e) { V.msg = 'Soubor se nepodařilo načíst. Je to záloha z této aplikace?'; }
+      render();
+    };
+    fr.readAsText(ev.target.files[0]);
+  }
+  function doExport() {
+    var blob = new Blob([C.exportSave()], { type: 'application/json' }), a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = 'trener-gramatiky-zaloha-' + C.today() + '.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    V.msg = 'Záloha je stažená.'; render();
+  }
+  // 10.0 Odlozene mluveni: po uplynuti casu zavibruj a obnov obrazovku Dnes (jen kdyz je aplikace otevrena)
+  var dueTimer = null;
+  function scheduleDue() {
+    clearTimeout(dueTimer);
+    var L = C.laterState(); if (!L || !L.due || L.notified) return;
+    dueTimer = setTimeout(function () {
+      var L2 = C.laterState(); if (!L2 || !L2.due || L2.notified) return;
+      if (L2.due > Date.now() + 1000) { scheduleDue(); return; }
+      L2.notified = true; C.save();
+      if (V.view !== 'session') {
+        if (navigator.vibrate) { try { navigator.vibrate([200, 100, 200]); } catch (e) { /* nic */ } }
+        if (V.view === 'home') render();
+      }
+    }, Math.max(0, L.due - Date.now()) + 300);
+  }
+  // 10.1 Klavesnice v mobilu: drz pole a tlacitko Zkontrolovat nad klavesnici
+  var kbTimer = null;
+  function showCheck() {
+    clearTimeout(kbTimer);
+    kbTimer = setTimeout(function () {
+      var a = document.activeElement, b = app.querySelector('[data-act="check"]');
+      if (a && a.matches && a.matches('input[data-gap]') && b) { try { b.scrollIntoView({ block: 'end', behavior: 'smooth' }); } catch (e) { b.scrollIntoView(false); } }
+    }, 300);
+  }
+  // 10.2 Vzhled: tmavy rezim a velikost pisma
+  var darkMq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+  function applyLook() {
+    var st = S().settings, t = st.theme || 'light';
+    var dark = t === 'dark' || (t === 'auto' && darkMq && darkMq.matches);
+    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+    document.documentElement.style.fontSize = (16 * (st.font || 1)) + 'px';
+    var m = document.querySelector('meta[name="theme-color"]');
+    if (m) m.setAttribute('content', dark ? '#0F1318' : '#F4F5F7');
+  }
+  function init() {
+    app = document.getElementById('app');
+    C.load();
+    applyLook();
+    if (darkMq) { var onMq = function () { if ((S().settings.theme || 'light') === 'auto') applyLook(); }; if (darkMq.addEventListener) darkMq.addEventListener('change', onMq); else if (darkMq.addListener) darkMq.addListener(onMq); }
+    app.addEventListener('click', onClick);
+    app.addEventListener('keydown', onKey);
+    app.addEventListener('change', onChange);
+    app.addEventListener('focusin', function (ev) { if (ev.target.matches && ev.target.matches('input[data-gap]')) showCheck(); });
+    if (window.visualViewport) window.visualViewport.addEventListener('resize', showCheck);
+    document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible' && V.view === 'home') render(); });
+    render();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+})();
