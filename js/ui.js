@@ -34,7 +34,7 @@
   function hm(ts) { var d = new Date(ts); return d.getHours() + ':' + (d.getMinutes() < 10 ? '0' : '') + d.getMinutes(); }
   function daysWord(n) { return n === 1 ? 'den' : (n >= 2 && n <= 4 ? 'dny' : 'dní'); }
   var STATUS = { 'new': 'Nové', learning: 'Učím se', firming: 'Upevňuji', done: 'Zvládnuto' };
-  var BLOCK = { review: 'Opakování', grammar: 'Gramatika', speed: 'Pohotovost', placement: 'Vstupní test', song: 'Písnička' };
+  var BLOCK = { review: 'Opakování', grammar: 'Gramatika', speed: 'Pohotovost', placement: 'Vstupní test', song: 'Písnička', drill: 'Dril vzorů' };
   var STAGES = [
     { n: 1, title: 'Přítomnost, minulost, plány', first: 1 },
     { n: 2, title: 'Předpřítomný čas, will', first: 4 },
@@ -104,11 +104,12 @@
         '<button type="button" class="btn-sec" data-act="skipplacement">Přeskočit, začít od začátku</button></div>';
     }
     var les = C.buildLesson(), nRev = 0, nGr = 0, nSp = 0;
-    les.queue.forEach(function (e) { if (e.block === 'review') nRev++; else if (e.block === 'grammar') nGr++; else nSp++; });
+    var nDr = 0;
+    les.queue.forEach(function (e) { if (e.block === 'review') nRev++; else if (e.block === 'grammar') nGr++; else if (e.block === 'drill') nDr++; else nSp++; });
     h += '<div class="card"><div class="row-b"><div class="card-t">Dnešní lekce</div><div class="muted small">' + les.queue.length + ' úloh</div></div>';
     h += step(1, 'Opakování', nRev ? nRev + ' vět z minulých dní' : 'Dnes není co opakovat');
     h += step(2, 'Gramatika dne', cu ? cu.code + ' ' + cu.title + ' · stupeň ' + C.effLvl(cu.id) : 'Etapa je hotová');
-    h += step(3, 'Pohotovost', nSp + ' překladů na čas');
+    h += step(3, 'Pohotovost', nSp + ' překlady na čas' + (nDr ? ' a dril vzorů (' + nDr + ' kroků)' : ''));
     h += step(4, 'Shrnutí', 'Chyby a co bylo procvičeno');
     h += '<button type="button" class="btn" data-act="lesson">' + (doneToday ? 'Dnešní lekce je hotová. Další kolo' : 'Začít lekci') + '</button></div>';
     h += '<div class="card"><div class="row-b"><div class="card-s">Etapa 1 ze 4</div><div class="muted small">' + prog.done + ' z ' + prog.total + ' jevů zvládnuto</div></div>' +
@@ -160,7 +161,8 @@
     h += '<div class="card"><div class="card-s">Procvičit</div><div class="seg">' + [1, 2, 3].map(function (L) {
       return '<button type="button" class="seg-b' + (L === lvl ? ' on' : '') + '" data-act="trainlvl" data-l="' + L + '">Stupeň ' + L + '</button>';
     }).join('') + '</div><p class="muted small">1 výběr ze dvou · 2 doplnění tvaru · 3 překlad z češtiny</p>' +
-      '<button type="button" class="btn" data-act="trainunit">Spustit 8 úloh</button></div>';
+      '<button type="button" class="btn" data-act="trainunit">Spustit 8 úloh</button>' +
+      (C.DRILL_OF_UNIT[u.id] ? '<button type="button" class="btn-sec" data-act="drill" data-u="' + u.id + '">' + icon('mic', 18) + 'Dril vzorů (5 kroků nahlas)</button>' : '') + '</div>';
     if (u.explain) h += '<h2>Výklad</h2>' + explainBody(u, null);
     return page(h);
   }
@@ -250,6 +252,14 @@
     h += '<div class="card"><div class="card-s">Pohotovost</div><p class="muted small">8 překladů z češtiny na čas, nahlas nebo písemně.</p><button type="button" class="btn" data-act="speed">Spustit</button></div>';
     h += '<div class="card"><div class="card-s">Co mi nejde</div><p class="muted small">' + (weakN ? weakN + ' vět s chybou. Zmizí po dvou správných odpovědích.' : 'Zatím žádné chyby.') + '</p>' +
       '<button type="button" class="btn-sec" data-act="weak"' + (weakN ? '' : ' disabled') + '>Zopakovat slabiny</button></div>';
+    if (C.DRILLS.length) {
+      h += '<div class="card"><div class="card-s">Dril vzorů</div><p class="muted small">Jedna věta a pět rychlých obměn: jiná osoba, čas, zápor, otázka. Každou obměnu řekni nahlas, ať vzorec naskočí sám.</p>';
+      C.DRILLS.forEach(function (d) {
+        var du = C.UNIT_BY_ID[d.u];
+        h += '<button type="button" class="urow" data-act="drill" data-u="' + d.u + '"><span><b>' + du.code + ' ' + esc(du.title) + '</b><br><span class="muted small">' + esc(d.en) + '</span></span>' + icon('mic', 20) + '</button>';
+      });
+      h += '</div>';
+    }
     h += '<div class="card"><div class="card-s">Jednotlivé jevy</div>';
     C.UNITS.forEach(function (u) {
       var us = C.unitState(u.id);
@@ -309,26 +319,31 @@
     var lvlNow = it.lvl;
     var h = '<main class="page sess"><div class="top"><button type="button" class="icon-b" data-act="quit" aria-label="Ukončit cvičení">' + icon('close', 20) + '</button>' +
       '<div class="bar grow"><div class="bar-in" style="width:' + Math.round(ses.idx / total * 100) + '%"></div></div><div class="muted small">' + (ses.idx + 1) + ' / ' + total + '</div></div>';
-    h += '<div class="row-b"><div class="muted small">' + BLOCK[e.block] + (e.block === 'speed' ? '' : ' · ' + u.code + ' ' + esc(u.title)) + '</div><div class="pill">Stupeň ' + lvlNow + '</div></div>';
+    h += '<div class="row-b"><div class="muted small">' + BLOCK[e.block] + (e.block === 'speed' ? '' : ' · ' + u.code + ' ' + esc(u.title)) + '</div><div class="pill">' + (it.drill ? 'Krok ' + it.step + ' / ' + it.steps : 'Stupeň ' + lvlNow) + '</div></div>';
     if (ses.flash) h += '<div class="card note small">' + esc(ses.flash) + '</div>';
     // 7.1 Zadani
     h += '<div class="card">';
     if (it.type === 'choice') h += '<div class="muted">Vyber správný tvar.</div><div class="sent">' + enText(it.en) + '</div>';
     else if (it.type === 'gap') h += '<div class="muted">Doplň chybějící slova.</div><div class="sent">' + enText(it.en) + '</div>';
-    else {
+    else if (it.drill) {
+      h += '<div class="muted">Změň větu podle zadání a řekni ji nahlas.</div><div class="drill-base">' + enText(it.base) + '</div>' +
+        (it.baseCz ? '<div class="muted small">' + esc(it.baseCz) + '</div>' : '') +
+        '<div class="cue"><span class="cue-l">Změna</span><span>' + esc(it.cue) + '</span></div>';
+    } else {
       h += '<div class="muted">Řekni nebo napiš anglicky.</div><div class="sent">' + esc(it.cz) + '</div>';
       if (e.timed && ses.phase === 'ask' && !ses.deferOpen) h += '<div class="tbar"><div class="bar t"><div class="bar-in" id="tfill" style="width:100%"></div></div><div class="tlabel" id="tlabel"></div></div>';
     }
     h += bubble();
     if (ses.ruleOpen) h += '<div class="rule"><b>Pravidlo:</b> ' + esc(u.rule) + (u.explain ? '<button type="button" class="link-b" data-act="explainopen">Celý výklad</button>' : '') + '</div>';
-    if (ses.hint && ses.phase === 'ask') h += '<div class="rule"><b>Nápověda:</b> ' + esc(ses.hint) + '</div>';
+    if (ses.hint && ses.phase === 'ask') h += '<div class="rule"><b>' + (ses.hintStep === 1 ? 'Kostra věty' : 'Nápověda') + ':</b> ' + esc(ses.hint) +
+      (ses.hintStep === 1 ? '<div class="muted small">Kostra se nepočítá jako chyba, další nápověda ano.</div>' : '') + '</div>';
     h += '</div>';
     // 7.2 Odpoved nebo vyhodnoceni
     if (ses.phase === 'ask') h += askArea(e, it); else h += feedback(e, it);
     h += '</main>';
     return h;
   }
-  function remainingSpeech() { return ses.queue.slice(ses.idx).filter(function (x) { return x.item.type === 'translate'; }); }
+  function remainingSpeech() { return ses.queue.slice(ses.idx).filter(function (x) { return x.item.type === 'translate' && !x.item.drill; }); }
   function deferPanel() {
     var n = remainingSpeech().length;
     return '<div class="card"><div class="card-s">Odložit mluvení</div>' +
@@ -354,12 +369,12 @@
       } else {
         h += '<p class="muted small">Mikrofon tady není dostupný (potřebuje Chrome a adresu https). Odpověď napiš.</p>';
       }
-      if (ses.kind !== 'placement') h += '<button type="button" class="btn-sec" data-act="deferopen">Teď nemůžu mluvit</button>';
+      if (ses.kind !== 'placement' && !it.drill) h += '<button type="button" class="btn-sec" data-act="deferopen">Teď nemůžu mluvit</button>';
       h += '<div class="inputs"><label class="lab" for="g0">Tvoje odpověď</label><input class="inp" id="g0" data-gap="0" type="text" enterkeyhint="done" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" value="' + esc(ses.draft[0] || '') + '"></div>';
     }
     if (it.type !== 'choice') h += '<button type="button" class="btn" data-act="check">Zkontrolovat</button>';
     if (e.block !== 'placement') {
-      h += '<div class="tools"><button type="button" class="btn-t" data-act="rule">Pravidlo</button><button type="button" class="btn-t" data-act="hint">Nápověda</button><button type="button" class="btn-t" data-act="dunno">Nevím</button></div>';
+      h += '<div class="tools"><button type="button" class="btn-t" data-act="rule">Pravidlo</button><button type="button" class="btn-t" data-act="hint"' + (ses.hintStep >= 3 ? ' disabled' : '') + '>' + (ses.hintStep ? 'Další nápověda' : 'Nápověda') + '</button><button type="button" class="btn-t" data-act="dunno">Nevím</button></div>';
     } else {
       h += '<div class="tools one"><button type="button" class="btn-t" data-act="dunno">Nevím</button></div>';
     }
@@ -382,12 +397,67 @@
     else if (C.correctList(it).length > 1) h += '<div class="muted small">Také: ' + esc(C.correctList(it).slice(1).join(' / ')) + '</div>';
     if (r.lvlChange) h += '<div class="small"><b>' + (r.lvlChange > 0 ? 'Jde ti to, příště těžší stupeň.' : 'Příště lehčí stupeň.') + '</b></div>';
     h += '</div>';
+    h += shadowBox();
     if (C.UNIT_BY_ID[e.unitId].explain) h += '<button type="button" class="btn-sec" data-act="explainopen">' + icon('book', 18) + (r.ok ? 'Vysvětlení gramatiky' : 'Proč? Vysvětlení gramatiky') + '</button>';
     h += '<div class="tools ' + ((!r.ok && it.type === 'translate' && r.your && !r.helped) ? 'two' : 'one') + '">';
     if (A.canSpeak()) h += '<button type="button" class="btn-t" data-act="say">' + icon('sound', 18) + ' Přehrát</button>';
     if (!r.ok && it.type === 'translate' && r.your && !r.helped && e.block !== 'placement') h += '<button type="button" class="btn-t" data-act="wasright">Moje odpověď byla správně</button>';
     h += '</div><div class="grow"></div><button type="button" class="btn" data-act="next">' + (ses.idx + 1 < ses.queue.length ? 'Další' : 'Dokončit') + '</button>';
     return h;
+  }
+
+  // 7.3 Opakuj po mne: prehraje spravnou vetu, pak posloucha a porovna slova
+  function shadowBox() {
+    var sh = ses.shadow;
+    if (!sh) return '<button type="button" class="btn-sec" data-act="shadow">' + icon('mic', 18) + 'Opakuj po mně</button>';
+    var h = '<div class="card shadow">';
+    if (sh.state === 'play') h += '<div class="card-s">Poslouchej…</div>';
+    else if (sh.state === 'listen') h += '<div class="card-s">Teď to řekni ty</div><div class="muted small" id="shHeard">' + esc(sh.heard || 'Poslouchám…') + '</div>';
+    else if (sh.state === 'self') h += '<div class="card-s">Řekni větu nahlas 2× stejným rytmem.</div><div class="muted small">' + esc(sh.msg || 'Mikrofon tady není k dispozici, porovnej se sám.') + '</div>';
+    else {
+      var pct = Math.round(sh.score * 100);
+      h += '<div class="card-s">' + (sh.score >= 0.85 ? 'Výborně, sedí to.' : (sh.score >= 0.6 ? 'Skoro. Zkus to ještě jednou.' : 'Zkus to znovu, pomaleji.')) + ' ' + pct + ' %</div>' +
+        '<div class="shw">' + sh.words.map(function (w) { return '<span class="' + (w.ok ? 'sw-ok' : 'sw-miss') + '">' + esc(w.t) + '</span>'; }).join(' ') + '</div>' +
+        (sh.heard ? '<div class="muted small">Slyšel jsem: ' + esc(sh.heard) + '</div>' : '');
+    }
+    if (sh.state === 'result' || sh.state === 'self') h += '<button type="button" class="btn-t" data-act="shadow">' + icon('mic', 18) + 'Znovu</button>';
+    return h + '</div>';
+  }
+  // Porovnani slov (nejdelsi spolecna posloupnost po normalizaci)
+  function matchWords(target, heard) {
+    var tw = String(target).split(/\s+/).filter(Boolean), flat = [], owner = [], hn = C.norm(heard).split(' ').filter(Boolean), i, j;
+    tw.forEach(function (w, k) { C.norm(w).split(' ').filter(Boolean).forEach(function (t) { flat.push(t); owner.push(k); }); });
+    var n = flat.length, m = hn.length, dp = [];
+    for (i = 0; i <= n; i++) { dp.push([]); for (j = 0; j <= m; j++) dp[i].push(0); }
+    for (i = n - 1; i >= 0; i--) for (j = m - 1; j >= 0; j--) dp[i][j] = flat[i] === hn[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    var hit = [], okW = tw.map(function () { return true; }), cnt = 0;
+    for (i = 0; i < n; i++) hit.push(false);
+    i = 0; j = 0;
+    while (i < n && j < m) { if (flat[i] === hn[j]) { hit[i] = true; cnt++; i++; j++; } else if (dp[i + 1][j] >= dp[i][j + 1]) i++; else j++; }
+    hit.forEach(function (v, k) { if (!v) okW[owner[k]] = false; });
+    return { score: n ? cnt / n : 0, words: tw.map(function (t, k) { return { t: t, ok: okW[k] }; }) };
+  }
+  function startShadow() {
+    var target = filled(cur().item), token = {};
+    A.stop(); ses.shadow = { state: 'play', heard: '', token: token }; render();
+    function alive() { return ses && ses.shadow && ses.shadow.token === token; }
+    function finish() { var r = matchWords(target, ses.shadow.heard); ses.shadow.state = 'result'; ses.shadow.score = r.score; ses.shadow.words = r.words; render(); }
+    A.speak(target, function () {
+      if (!alive()) return;
+      if (!A.canListen()) { ses.shadow.state = 'self'; render(); return; }
+      ses.shadow.state = 'listen'; render();
+      A.listen({
+        onText: function (t) { if (!alive()) return; ses.shadow.heard = t; var el = document.getElementById('shHeard'); if (el) el.textContent = t; },
+        onEnd: function () { if (alive() && ses.shadow.state === 'listen') finish(); },
+        onError: function (code) {
+          if (!alive()) return;
+          if (code === 'no-speech') { finish(); return; }
+          ses.shadow.state = 'self';
+          ses.shadow.msg = (code === 'not-allowed' || code === 'service-not-allowed') ? 'Mikrofon není povolený, porovnej se sám.' : 'Mikrofon teď nefunguje, porovnej se sám.';
+          render();
+        }
+      });
+    });
   }
 
   // ---------- 8. CVICENI (logika) ----------
@@ -401,7 +471,7 @@
     stopTimer(); A.stop();
     ses.phase = 'ask'; ses.draft = []; ses.hintStep = 0; ses.hint = ''; ses.ruleOpen = false; ses.bubble = null;
     ses.listening = false; ses.micErr = ''; ses.slow = false; ses.startTs = Date.now(); ses.last = null;
-    ses.deferOpen = false; ses.flash = ''; ses.explain = false;
+    ses.deferOpen = false; ses.flash = ''; ses.explain = false; ses.shadow = null; A.hush();
   }
   function readDraft() {
     var ins = app.querySelectorAll('input[data-gap]');
@@ -421,21 +491,28 @@
   }
   function stopTimer() { if (timer) { clearInterval(timer); timer = null; } }
   function submit(answer, forcedWrong) {
-    var e = cur(), it = e.item, helped = ses.hintStep > 0 || !!forcedWrong;
+    var e = cur(), it = e.item, helped = ses.hintStep >= 2 || !!forcedWrong;
     var ok = !helped && C.check(it, answer), ms = Date.now() - ses.startTs;
     stopTimer(); A.stop(); ses.listening = false;
     var your = forcedWrong ? '' : (Array.isArray(answer) ? answer.join(' ... ') : answer);
-    var out = e.block === 'placement' ? { lvlChange: 0 } : C.record(it.id, ok, ms);
-    ses.last = { itemId: it.id, ok: ok, your: your, slow: ses.slow, helped: helped, dunno: !!forcedWrong, ms: ms, lvlChange: e.block === 'grammar' ? out.lvlChange : 0 };
+    var out = (e.block === 'placement' || it.drill) ? { lvlChange: 0 } : C.record(it.id, ok, ms);
+    ses.last = { itemId: it.id, item: it, unitId: e.unitId, ok: ok, your: your, slow: ses.slow, helped: helped, dunno: !!forcedWrong, ms: ms, lvlChange: e.block === 'grammar' ? out.lvlChange : 0 };
     ses.results.push(ses.last);
     if (it.type === 'translate' && e.block !== 'placement') C.laterDone(it.id);
     ses.phase = 'feedback'; ses.bubble = null;
     if (S().settings.voice && e.block !== 'placement') A.speak(filled(it));
     render();
   }
-  function hintFor(it, stepN) {
+  // Napoveda po krocich: 1 kostra vety (zdarma), 2 zacatek odpovedi, 3 cela odpoved
+  function frameOf(e) {
+    var u = C.UNIT_BY_ID[e.unitId], p = (u && u.explain && e.item.why) ? pointOf(u.explain, e.item.why) : null;
+    return p && p.f ? p.f : '';
+  }
+  function hintFor(e, stepN) {
+    var it = e.item;
+    if (stepN === 1) return frameOf(e);
     var full = it.type === 'translate' ? C.correctList(it)[0] : (it.type === 'choice' ? it.ans : it.ans.map(function (a) { return a.split('|')[0]; }).join(' ... '));
-    if (stepN >= 2) return full;
+    if (stepN >= 3) return full;
     if (it.type === 'translate') return full.split(' ').slice(0, 2).join(' ') + ' …';
     return full.split(' ... ').map(function (p) { return p.charAt(0) + '…'; }).join('  ');
   }
@@ -509,14 +586,14 @@
   // ---------- 9. SHRNUTI ----------
   function viewSummary() {
     var R = lastSummary.results, okN = 0, ms = 0, units = {}, errs = [], slow = 0;
-    R.forEach(function (r) { if (r.ok) okN++; else errs.push(r); if (r.slow) slow++; ms += r.ms; units[C.UNIT_OF_ITEM[r.itemId]] = 1; });
+    R.forEach(function (r) { if (r.ok) okN++; else errs.push(r); if (r.slow) slow++; ms += r.ms; units[r.unitId || C.UNIT_OF_ITEM[r.itemId]] = 1; });
     var streak = C.streakNow();
     var h = '<main class="page sess"><div class="head"><div><h1>' + (lastSummary.kind === 'lesson' ? 'Lekce hotová' : 'Hotovo') + '</h1><div class="muted small">' + R.length + ' úloh · ' + Math.max(1, Math.round(ms / 60000)) + ' min</div></div></div>';
     h += '<div class="tiles"><div class="tile"><span>Správně</span><b>' + okN + ' / ' + R.length + '</b></div><div class="tile"><span>Reakce</span><b>' + String(Math.round(ms / Math.max(1, R.length) / 100) / 10).replace('.', ',') + ' s</b></div><div class="tile"><span>Série</span><b>' + streak + ' ' + daysWord(streak) + '</b></div></div>';
     h += '<h2>Chyby (' + errs.length + ')</h2>';
     if (!errs.length) h += '<p class="muted">Bez chyby.</p>';
     errs.forEach(function (r) {
-      var it = C.ITEM_BY_ID[r.itemId], u = C.UNIT_BY_ID[C.UNIT_OF_ITEM[r.itemId]];
+      var it = r.item || C.ITEM_BY_ID[r.itemId], u = C.UNIT_BY_ID[r.unitId || C.UNIT_OF_ITEM[r.itemId]];
       h += '<div class="card err"><div class="muted small">' + u.code + ' · ' + esc(u.title) + (r.dunno ? ' · Nevím' : (r.helped ? ' · s nápovědou' : '')) + '</div>' +
         (it.type === 'translate' ? '<div class="small">' + esc(it.cz) + '</div>' : '') +
         (r.your ? '<div class="bad-t"><b>Tvoje:</b> ' + esc(r.your) + '</div>' : '') +
@@ -543,7 +620,8 @@
     var h = '<div class="card"><p>' + esc(X.intro) + '</p></div>';
     h += '<h2>Tvary</h2><div class="card">' + X.form.map(function (f) { return '<div class="xf"><div class="xf-k">' + esc(f.k) + '</div><div>' + esc(f.v) + '</div></div>'; }).join('') + '</div>';
     h += '<h2>Pravidla</h2>' + X.points.map(function (p) {
-      return '<div class="card' + (p.id === hl ? ' hl' : '') + '"><div class="card-s">' + esc(p.t) + '</div><p class="small">' + esc(p.x) + '</p>' + exList(p.ex) + '</div>';
+      return '<div class="card' + (p.id === hl ? ' hl' : '') + '"><div class="card-s">' + esc(p.t) + '</div><p class="small">' + esc(p.x) + '</p>' +
+        (p.f ? '<div class="small"><b>Kostra:</b> ' + esc(p.f) + '</div>' : '') + exList(p.ex) + '</div>';
     }).join('');
     h += '<h2>Časté chyby</h2><div class="card">' + X.pitfalls.map(function (p) {
       return '<div class="pit"><div class="bad-t"><s>' + esc(p.bad) + '</s></div><div><b>' + esc(p.good) + '</b></div><div class="muted small">' + esc(p.why) + '</div></div>';
@@ -561,7 +639,8 @@
         (!res.ok && res.your ? '<div class="bad-t"><b>Tvoje:</b> ' + esc(res.your) + '</div>' : '') +
         '<div><b>Správně:</b> ' + esc(filled(item)) + '</div></div>';
     }
-    if (p) h += '<div class="card hl"><div class="small muted">Proč je to takhle</div><div class="card-s">' + esc(p.t) + '</div><p class="small">' + esc(p.x) + '</p>' + exList(p.ex) + '</div>';
+    if (p) h += '<div class="card hl"><div class="small muted">Proč je to takhle</div><div class="card-s">' + esc(p.t) + '</div><p class="small">' + esc(p.x) + '</p>' +
+      (p.f ? '<div class="small"><b>Kostra:</b> ' + esc(p.f) + '</div>' : '') + exList(p.ex) + '</div>';
     h += explainBody(u, null);
     h += '<button type="button" class="btn" data-act="' + backAct + '">' + esc(backLabel) + '</button></main>';
     return h;
@@ -573,7 +652,7 @@
     if (V.view === 'session' && ses) h = viewSession();
     else if (V.view === 'summary' && lastSummary) h = viewSummary();
     else if (V.view === 'explain' && V.ex && V.ex.unitId) h = explainPage(V.ex.unitId, null, null, 'explainback', 'Zpět na písničku');
-    else if (V.view === 'explain' && lastSummary && V.ex) { var rr = lastSummary.results[V.ex.r]; h = explainPage(C.UNIT_OF_ITEM[rr.itemId], C.ITEM_BY_ID[rr.itemId], rr, 'explainback', 'Zpět na shrnutí'); }
+    else if (V.view === 'explain' && lastSummary && V.ex) { var rr = lastSummary.results[V.ex.r]; h = explainPage(rr.unitId || C.UNIT_OF_ITEM[rr.itemId], rr.item || C.ITEM_BY_ID[rr.itemId], rr, 'explainback', 'Zpět na shrnutí'); }
     else if (V.view === 'songs') h = viewSongs();
     else if (V.view === 'song' && V.songId) h = viewSong();
     else if (V.view === 'map') h = viewMap();
@@ -621,13 +700,15 @@
         render(); break;
       case 'saveword': readDraft(); C.lookup(el.getAttribute('data-w'), true); render(); break;
       case 'rule': readDraft(); ses.ruleOpen = !ses.ruleOpen; render(); break;
-      case 'hint': readDraft(); ses.hintStep = Math.min(2, ses.hintStep + 1); ses.hint = hintFor(cur().item, ses.hintStep); render(); break;
+      case 'hint': readDraft(); ses.hintStep = Math.min(3, ses.hintStep + 1); if (ses.hintStep === 1 && !frameOf(cur())) ses.hintStep = 2; ses.hint = hintFor(cur(), ses.hintStep); render(); break;
       case 'dunno': submit(null, true); break;
       case 'choose': submit(el.getAttribute('data-a')); break;
       case 'check': readDraft(); submit(cur().item.type === 'gap' ? cur().item.ans.map(function (a, i) { return ses.draft[i] || ''; }) : (ses.draft[0] || '')); break;
       case 'easier': changeLvl(-1); break;
       case 'harder': changeLvl(1); break;
       case 'mic': toggleMic(); break;
+      case 'shadow': startShadow(); break;
+      case 'drill': startSession(C.buildDrill(el.getAttribute('data-u'))); break;
       case 'deferopen': readDraft(); stopTimer(); A.stop(); ses.listening = false; ses.deferOpen = true; render(); break;
       case 'deferclose': ses.deferOpen = false; ses.startTs = Date.now(); ses.slow = false; render(); break;
       case 'defer': doDefer(+el.getAttribute('data-m')); break;
@@ -652,10 +733,11 @@
       case 'say': A.speak(filled(cur().item)); break;
       case 'wasright':
         C.addVariant(ses.last.itemId, ses.last.your); ses.last.ok = true;
-        C.record(ses.last.itemId, true, 0); render(); break;
+        if (!ses.last.item.drill) C.record(ses.last.itemId, true, 0);
+        render(); break;
       case 'next': nextItem(); break;
       case 'repeaterr':
-        var q = lastSummary.results.filter(function (r) { return !r.ok; }).map(function (r) { return { item: C.ITEM_BY_ID[r.itemId], unitId: C.UNIT_OF_ITEM[r.itemId], block: 'review', timed: false }; });
+        var q = lastSummary.results.filter(function (r) { return !r.ok; }).map(function (r) { return { item: r.item || C.ITEM_BY_ID[r.itemId], unitId: r.unitId || C.UNIT_OF_ITEM[r.itemId], block: r.item && r.item.drill ? 'drill' : 'review', timed: false }; });
         startSession({ kind: 'weak', queue: q }); break;
     }
   }

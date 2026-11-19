@@ -143,6 +143,14 @@ span.cell { min-height: 30px; }
 .fb.ok .fb-t { color: var(--acc-deep); }
 .fb.bad .fb-t { color: var(--warn); }
 
+.drill-base { font-size: 1.375rem; line-height: 1.4; font-weight: 600; }
+.cue { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 1.0625rem; font-weight: 600; }
+.cue-l { font-size: 0.8125rem; font-weight: 600; color: var(--on-acc); background: var(--acc); border-radius: 8px; padding: 4px 8px; }
+.card.shadow { background: var(--acc-soft); border-color: var(--acc-mid); gap: 8px; }
+.shw { font-size: 1.125rem; font-weight: 600; line-height: 1.5; }
+.sw-ok { color: var(--acc-deep); }
+.sw-miss { color: var(--warn); text-decoration: underline wavy; text-underline-offset: 3px; }
+
 /* ---------- 5B. VYKLAD GRAMATIKY ---------- */
 .card.hl { background: var(--acc-soft); border: 2px solid var(--acc-line); }
 .ex { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 1rem; }

@@ -1,6 +1,6 @@
 // =====================================================================
 // Trener gramatiky - audio.js
-// 1. CTENI NAHLAS (TTS, en-US)
+// 1. CTENI NAHLAS (TTS, en-US, s oznamenim konce)
 // 2. ROZPOZNAVANI RECI (mikrofon, en-US)
 // =====================================================================
 (function () {
@@ -8,15 +8,21 @@
 
   // ---------- 1. CTENI NAHLAS ----------
   function canSpeak() { return 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window; }
-  function speak(text) {
-    if (!canSpeak()) return;
+  // onEnd: zavola se po dohrani (nebo hned, kdyz cteni neni k dispozici)
+  function speak(text, onEnd) {
+    var done = false;
+    function fin() { if (!done) { done = true; if (onEnd) onEnd(); } }
+    if (!canSpeak()) { if (onEnd) setTimeout(fin, 0); return; }
     try {
       window.speechSynthesis.cancel();
       var u = new SpeechSynthesisUtterance(String(text).replace(/___/g, ' '));
       u.lang = 'en-US'; u.rate = 0.95;
+      u.onend = fin; u.onerror = fin;
       window.speechSynthesis.speak(u);
-    } catch (e) { /* bez zvuku */ }
+      if (onEnd) setTimeout(fin, 1500 + 120 * String(text).length);   // pojistka, kdyby onend neprisel
+    } catch (e) { if (onEnd) setTimeout(fin, 0); }
   }
+  function hush() { try { if (canSpeak()) window.speechSynthesis.cancel(); } catch (e) { /* nic */ } }
 
   // ---------- 2. ROZPOZNAVANI RECI ----------
   var Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -42,5 +48,5 @@
   function stop() { if (active) { try { active.onend = null; active.abort(); } catch (e) { /* nic */ } active = null; } }
   function isListening() { return !!active; }
 
-  window.Sound = { canSpeak: canSpeak, speak: speak, canListen: canListen, listen: listen, stop: stop, isListening: isListening };
+  window.Sound = { canSpeak: canSpeak, speak: speak, hush: hush, canListen: canListen, listen: listen, stop: stop, isListening: isListening };
 })();

@@ -6,6 +6,7 @@
 // 3. ULOZENA HRA (nacteni, migrace, zaloha)
 // 4. DATA (jevy a ulohy)
 // 4B. PISNICKY
+// 4C. DRILY VZORU
 // 5. NORMALIZACE A KONTROLA ODPOVEDI
 // 6. ZAZNAM ODPOVEDI (Leitner, slabiny, uroven, stav jevu)
 // 7. VYBER ULOH (lekce, trenink, vstupni test)
@@ -17,7 +18,7 @@
 
   // ---------- 1. KONFIGURACE ----------
   var CONFIG = {
-    appVersion: '1.6',
+    appVersion: '1.7',
     saveKey: 'trenerGramatiky.save',
     schemaVersion: 1,
     leitnerDays: [0, 1, 2, 4, 8, 16, 32],   // intervaly krabicek 0-6
@@ -25,7 +26,7 @@
     lvlUp: 0.85, lvlDown: 0.60, lvlWindow: 6, // automaticka obtiznost
     doneAcc: 0.85, doneMin: 8,                // jev zvladnut
     firmAcc: 0.70,
-    lesson: { review: 6, grammar: 6, speed: 4 },
+    lesson: { review: 6, grammar: 6, speed: 3, drill: true },
     speedBaseSec: 8, speedPerWordSec: 1.5     // casovy limit pohotovosti
   };
 
@@ -128,6 +129,21 @@
     var s = SONG_BY_ID[id], items = s.items.slice().sort(function (a, b) { return a.lvl - b.lvl; });
     return { kind: 'song', unitId: null, queue: items.map(function (it) { return { item: it, unitId: it.u, block: 'song', timed: false }; }) };
   }
+
+  // ---------- 4C. DRILY VZORU ----------
+  // Kazdy krok drilu navazuje na spravnou vetu predchoziho kroku. Drily se nezapisuji do Leitneru ani do stavu jevu.
+  var DRILLS = (window.TG_DATA && window.TG_DATA.drills) || [], DRILL_OF_UNIT = {};
+  DRILLS.forEach(function (d) { DRILL_OF_UNIT[d.u] = d; });
+  function drillEntries(d) {
+    var base = d.en;
+    return d.steps.map(function (st, k) {
+      var it = { id: d.id + '-' + (k + 1), type: 'translate', drill: true, lvl: 3, base: base, baseCz: k === 0 ? d.cz : '',
+        cue: st.cue, cz: base + ' → ' + st.cue, en: st.en, why: st.why, step: k + 1, steps: d.steps.length };
+      base = st.en[0];
+      return { item: it, unitId: d.u, block: 'drill', timed: false };
+    });
+  }
+  function buildDrill(unitId) { var d = DRILL_OF_UNIT[unitId]; return { kind: 'drill', unitId: unitId, queue: d ? drillEntries(d) : [] }; }
 
   function effLvl(unitId) { return clamp(unitState(unitId).lvl + (S.settings.offset || 0), 1, 3); }
 
@@ -262,6 +278,7 @@
       }
     });
     shuffle(pool).slice(0, CONFIG.lesson.speed).forEach(function (it) { q.push(entry(it, 'speed', true)); });
+    if (CONFIG.lesson.drill && cu && DRILL_OF_UNIT[cu.id]) q = q.concat(drillEntries(DRILL_OF_UNIT[cu.id]));
     return { kind: 'lesson', unitId: cu ? cu.id : null, queue: q };
   }
   function buildTraining(unitId, lvl) {
@@ -351,6 +368,7 @@
     finishLesson: finishLesson, streakNow: streakNow, stageProgress: stageProgress, totals: totals,
     laterState: laterState, laterReady: laterReady, deferItems: deferItems, laterDone: laterDone, buildLater: buildLater,
     SONGS: SONGS, SONG_BY_ID: SONG_BY_ID, SONG_OF_ITEM: SONG_OF_ITEM, songState: songState, songProgress: songProgress,
-    answerQuiz: answerQuiz, resetQuiz: resetQuiz, buildSong: buildSong
+    answerQuiz: answerQuiz, resetQuiz: resetQuiz, buildSong: buildSong,
+    DRILLS: DRILLS, DRILL_OF_UNIT: DRILL_OF_UNIT, buildDrill: buildDrill
   };
 })();
